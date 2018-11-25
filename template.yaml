@@ -1,0 +1,515 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+          re:Invent 2018 Builder Session - Managing Long Lived Transactions with AWS Step Functions. 
+          AWS Step Functions is a fully managed Serverless workflow management service for managing 
+          long running processes and coordinating the components of distributed applications and 
+          microservices using visual workflows. But did you know it can also help you deal with the 
+          complexities of dealing with a long lived transaction across distributed components in your 
+          microservices architecture? In this Builder session, you will learn how AWS Step Function 
+          can help us implement the Saga design pattern.
+
+
+######   ##        #######  ########     ###    ##        ######  
+##    ##  ##       ##     ## ##     ##   ## ##   ##       ##    ## 
+##        ##       ##     ## ##     ##  ##   ##  ##       ##       
+##   #### ##       ##     ## ########  ##     ## ##        ######  
+##    ##  ##       ##     ## ##     ## ######### ##             ## 
+##    ##  ##       ##     ## ##     ## ##     ## ##       ##    ## 
+ ######   ########  #######  ########  ##     ## ########  ######  
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Tracing: Active
+    Runtime: go1.x
+    Timeout: 5
+    Tags:
+      project: reInvent2018
+      session: API401 - Managing Long Lived Transactions with AWS Step Functions
+
+Resources:
+
+##          ###    ##     ## ########  ########     ###    
+##         ## ##   ###   ### ##     ## ##     ##   ## ##   
+##        ##   ##  #### #### ##     ## ##     ##  ##   ##  
+##       ##     ## ## ### ## ########  ##     ## ##     ## 
+##       ######### ##     ## ##     ## ##     ## ######### 
+##       ##     ## ##     ## ##     ## ##     ## ##     ## 
+######## ##     ## ##     ## ########  ########  ##     ##
+
+# More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+
+  # NewOrderFunction represents task to create a new order and set status to "new order"
+  NewOrderFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./order/new/
+      Handler: main
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref OrdersTable
+
+  # UpdateOrderFunction represents the compensating transaction to set order status to "pending"
+  UpdateOrderFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./order/update/
+      Handler: main
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OrdersTable
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref OrdersTable
+
+  # ProcessPaymentFunction
+  ProcessPaymentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./payment/pay/
+      Handler: main
+      Role: !Sub ${PaymentFunctionsRole.Arn}
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref PaymentsTable
+
+  # ProcessRefundFunction represents the compensating transaction to refund customer order
+  ProcessRefundFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./payment/refund/
+      Handler: main
+      Role: !Sub ${PaymentFunctionsRole.Arn}
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref PaymentsTable
+  
+  # ReserveInventoryFunction represents task to reserve/remove order items from the inventory
+  ReserveInventoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./inventory/reserve/
+      Handler: main
+      Role: !Sub ${InventoryFunctionsRole.Arn}
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref InventoryTable
+
+  # ReleaseInventoryFunction represents the compensating transaction to reverses the changes to the inventory
+  ReleaseInventoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./inventory/release/
+      Handler: main
+      Role: !Sub ${InventoryFunctionsRole.Arn}
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref InventoryTable
+
+######  ######## ######## ########     ######## ##     ## ##    ##  ######  ######## ####  #######  ##    ## ######  
+##    ##    ##    ##       ##     ##    ##       ##     ## ###   ## ##    ##    ##     ##  ##     ## ###   ####    ## 
+##          ##    ##       ##     ##    ##       ##     ## ####  ## ##          ##     ##  ##     ## ####  ####       
+ ######     ##    ######   ########     ######   ##     ## ## ## ## ##          ##     ##  ##     ## ## ## ## ######  
+      ##    ##    ##       ##           ##       ##     ## ##  #### ##          ##     ##  ##     ## ##  ####      ## 
+##    ##    ##    ##       ##           ##       ##     ## ##   ### ##    ##    ##     ##  ##     ## ##   #####    ## 
+ ######     ##    ######## ##           ##        #######  ##    ##  ######     ##    ####  #######  ##    ## ###### 
+
+  # TODO: Add your Step Function resource here
+  SagaStateMachine:
+      Type: "AWS::StepFunctions::StateMachine"
+      Properties:
+        StateMachineName: !Ref "AWS::StackName"
+        RoleArn: !GetAtt StepFunctionsServiceRole.Arn
+        DefinitionString: !Sub |-
+          {
+            "Comment": "",
+            "StartAt": "ProcessOrder",
+            "States": {
+              "ProcessOrder": {
+                "Comment": "First transaction to save the order and set the order status to new",
+                "Type": "Task",
+                "Resource": "${NewOrderFunction.Arn}",
+                "TimeoutSeconds": 10,
+                "Catch": [{
+                  "ErrorEquals": ["ErrProcessOrder"],
+                  "ResultPath": "$.error",
+                  "Next": "UpdateOrderStatus"
+                }],
+                "Next": "ProcessPayment"
+              },
+              "ProcessPayment": {
+                "Comment": "Task processes the order payment",
+                "Type": "Task",
+                "Resource": "${ProcessPaymentFunction.Arn}",
+                "TimeoutSeconds": 10,
+                "Catch": [{
+                  "ErrorEquals": ["ErrProcessPayment"],
+                  "ResultPath": "$.error",
+                  "Next": "ProcessRefund"
+                }],
+                "Next": "ReserveInventory"
+              },
+              "ReserveInventory": {
+                "Comment": "Task to reserve order items in inventory",
+                "Type": "Task",
+                "Resource": "${ReserveInventoryFunction.Arn}",
+                "TimeoutSeconds": 10,
+                "Catch": [{
+                  "ErrorEquals": ["ErrReserveInventory"],
+                  "ResultPath": "$.error",
+                  "Next": "ReleaseInventory"
+                }],
+                "Next": "OrderSucceeded"
+              },
+              "OrderSucceeded": {
+                "Type": "Succeed"
+              },
+              "ReleaseInventory": {
+                "Comment": "Task to release order items back to inventory",
+                "Type": "Task",
+                "Resource": "${ReleaseInventoryFunction.Arn}",
+                "TimeoutSeconds": 10,
+                "Retry": [{
+                  "ErrorEquals": ["States.ALL"],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2.0
+                  }],
+                  "Catch": [{
+                    "ErrorEquals": ["ErrReleaseInventory"],
+                    "ResultPath": "$.error",
+                    "Next": "ReleaseInventoryFailed"
+                  }
+                ],
+                "Next": "ProcessRefund"
+              },
+              "ReleaseInventoryFailed": {
+                "Type": "Fail"
+              },
+              "ProcessRefund": {
+                "Comment": "Task to process order refund",
+                "Type": "Task",
+                "Resource": "${ProcessRefundFunction.Arn}",
+                "TimeoutSeconds": 10,
+                "Retry": [{
+                  "ErrorEquals": ["States.TaskFailed"],
+                  "IntervalSeconds": 1,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2.0
+                  }],
+                  "Catch": [{
+                    "ErrorEquals": ["ErrProcessRefund"],
+                    "ResultPath": "$.error",
+                    "Next": "ProcessRefundFailed"
+                  }
+                ],
+                "Next": "UpdateOrderStatus"
+              },
+              "ProcessRefundFailed": {
+                "Type": "Fail"
+              },
+              "UpdateOrderStatus": {
+                "Comment": "Task sets the order status to Pending.",
+                "Type": "Task",
+                "Resource": "${UpdateOrderFunction.Arn}",
+                "TimeoutSeconds": 10,
+                "Catch": [{
+                    "ErrorEquals": ["ErrUpdateOrderStatus"],
+                    "ResultPath": "$.error",
+                    "Next": "UpdateOrderStatusFailed"
+                  }
+                ],
+                "Next": "UpdateOrderStatusSucceeded"
+              },
+              "UpdateOrderStatusFailed": {
+                "Type": "Fail"
+              },
+              "UpdateOrderStatusSucceeded": {
+                "Type": "Succeed"
+              }
+            }
+          }
+
+
+########  ##    ## ##    ##    ###    ##     ##  #######  ########  ########  
+##     ##  ##  ##  ###   ##   ## ##   ###   ### ##     ## ##     ## ##     ## 
+##     ##   ####   ####  ##  ##   ##  #### #### ##     ## ##     ## ##     ## 
+##     ##    ##    ## ## ## ##     ## ## ### ## ##     ## ##     ## ########  
+##     ##    ##    ##  #### ######### ##     ## ##     ## ##     ## ##     ## 
+##     ##    ##    ##   ### ##     ## ##     ## ##     ## ##     ## ##     ## 
+########     ##    ##    ## ##     ## ##     ##  #######  ########  ########  
+
+#https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlesssimpletable
+  OrdersTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey:
+        Name: order_id
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      Tags:
+        project: reInvent2018
+        session: Managing Long Lived Transactions with AWS Step Functions
+
+  PaymentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+      - AttributeName: "transaction_id"
+        AttributeType: "S"
+      - AttributeName: "order_id"
+        AttributeType: "S"
+      - AttributeName: "payment_type"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "transaction_id"
+        KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "5"
+        WriteCapacityUnits: "5"
+      GlobalSecondaryIndexes:
+      - IndexName: "orderIDIndex"
+        KeySchema:
+        - AttributeName: "order_id"
+          KeyType: "HASH"
+        - AttributeName: "payment_type"
+          KeyType: "RANGE"
+        Projection:
+          ProjectionType: "ALL"
+        ProvisionedThroughput:
+          ReadCapacityUnits: "1"
+          WriteCapacityUnits: "1"
+      Tags:
+      - Key: project
+        Value: reInvent2018
+      - Key: session
+        Value: Managing Long Lived Transactions with AWS Step Functions
+
+  InventoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: "transaction_id"
+          AttributeType: "S"
+        - AttributeName: "order_id"
+          AttributeType: "S"
+        - AttributeName: "transaction_type"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "transaction_id"
+          KeyType: "HASH"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "5"
+        WriteCapacityUnits: "5"
+      GlobalSecondaryIndexes:
+        - IndexName: "orderIDIndex"
+          KeySchema:
+            - AttributeName: "order_id"
+              KeyType: "HASH"
+            - AttributeName: "transaction_type"
+              KeyType: "RANGE"
+          Projection:
+            ProjectionType: "ALL"
+          ProvisionedThroughput:
+            ReadCapacityUnits: "1"
+            WriteCapacityUnits: "1"
+      Tags:
+        - Key: project
+          Value: reInvent2018
+        - Key: session
+          Value: Managing Long Lived Transactions with AWS Step Functions
+
+####    ###    ##     ## 
+ ##    ## ##   ###   ### 
+ ##   ##   ##  #### #### 
+ ##  ##     ## ## ### ## 
+ ##  ######### ##     ## 
+ ##  ##     ## ##     ## 
+#### ##     ## ##     ## 
+  StepFunctionsServiceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Path: !Join ["", ["/", !Ref "AWS::StackName", "/"]]
+      ManagedPolicyArns:
+          - "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+            -
+              Sid: "AllowStepFunctionsServiceToAssumeRole"
+              Effect: "Allow"
+              Action: 
+                  - "sts:AssumeRole"
+              Principal:
+                  Service:
+                      - !Sub "states.${AWS::Region}.amazonaws.com"
+      Policies:
+        - PolicyName: "CallLambdaFunctions"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: "Allow"
+              Action:
+                - "lambda:InvokeFunction"
+              Resource: 
+                - !Sub ${NewOrderFunction.Arn}
+                - !Sub ${UpdateOrderFunction.Arn}
+                - !Sub ${ProcessPaymentFunction.Arn}
+                - !Sub ${ProcessRefundFunction.Arn}
+                - !Sub ${ReserveInventoryFunction.Arn}
+                - !Sub ${ReleaseInventoryFunction.Arn}
+
+  InventoryFunctionsRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        -
+          Sid: "AllowLambdaServiceToAssumeRole"
+          Effect: "Allow"
+          Action:
+          - "sts:AssumeRole"
+          Principal:
+            Service:
+            - "lambda.amazonaws.com"
+      Policies:
+      -   PolicyName: "AllowCRUDOperationsOnDynamoDB"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            -
+              Effect: "Allow"
+              Action:
+              - 'dynamodb:GetItem'
+              - 'dynamodb:DeleteItem'
+              - 'dynamodb:DescribeTable'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:Scan'
+              - 'dynamodb:Query'
+              - 'dynamodb:UpdateItem'
+              - 'dynamodb:BatchWriteItem'
+              - 'dynamodb:BatchGetItem'
+              Resource:
+              - !Sub ${InventoryTable.Arn}
+              - !Sub ${InventoryTable.Arn}/index/*
+
+  PaymentFunctionsRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        -
+          Sid: "AllowLambdaServiceToAssumeRole"
+          Effect: "Allow"
+          Action:
+          - "sts:AssumeRole"
+          Principal:
+            Service:
+            - "lambda.amazonaws.com"
+      Policies:
+      -   PolicyName: "AllowCRUDOperationsOnDynamoDB"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            -
+              Effect: "Allow"
+              Action:
+              - 'dynamodb:GetItem'
+              - 'dynamodb:DeleteItem'
+              - 'dynamodb:DescribeTable'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:Scan'
+              - 'dynamodb:Query'
+              - 'dynamodb:UpdateItem'
+              - 'dynamodb:BatchWriteItem'
+              - 'dynamodb:BatchGetItem'
+              Resource:
+              - !Sub ${PaymentsTable.Arn}
+              - !Sub ${PaymentsTable.Arn}/index/*
+
+ #######  ##     ## ######## ########  ##     ## ########  ######  
+##     ## ##     ##    ##    ##     ## ##     ##    ##    ##    ## 
+##     ## ##     ##    ##    ##     ## ##     ##    ##    ##       
+##     ## ##     ##    ##    ########  ##     ##    ##     ######  
+##     ## ##     ##    ##    ##        ##     ##    ##          ## 
+##     ## ##     ##    ##    ##        ##     ##    ##    ##    ## 
+ #######   #######     ##    ##         #######     ##     ######  
+Outputs:
+
+  # NewOrderFunction
+  NewOrderFunctionArn:
+    Description: "Process Order Function ARN"
+    Value: !GetAtt NewOrderFunction.Arn
+
+  NewOrderFunctionIamRole:
+    Description: "Implicit IAM Role created for Process Order function"
+    Value: !GetAtt NewOrderFunctionRole.Arn
+  
+  # UpdateOrderFunction
+  UpdateOrderFunctionrn:
+    Description: "Process Order Update Function ARN"
+    Value: !GetAtt UpdateOrderFunction.Arn
+
+  UpdateOrderFunctionIamRole:
+    Description: "Implicit IAM Role created for Process Order function"
+    Value: !GetAtt UpdateOrderFunctionRole.Arn
+
+  # ProcessPaymentFunction
+  ProcessPaymentFunctionArn:
+    Description: "Process Payment Function ARN"
+    Value: !GetAtt ProcessPaymentFunction.Arn
+
+  # ProcessRefundFunction
+  ProcessRefundFunctionArn:
+    Description: "Process Payment Refund Function ARN"
+    Value: !GetAtt ProcessRefundFunction.Arn
+
+  PaymentFunctionsIamRole:
+    Description: "Implicit IAM Role created for payment functions"
+    Value: !GetAtt PaymentFunctionsRole.Arn
+
+  # ReserveInventoryFunction
+  ReserveInventoryFunctionArn:
+    Description: "Reserve Inventory Function ARN"
+    Value: !GetAtt ReserveInventoryFunction.Arn
+
+  # ReleaseInventoryFunction
+  ReleaseInventoryFunctionFunctionArn:
+    Description: "Release Inventory Function ARN"
+    Value: !GetAtt ReleaseInventoryFunction.Arn
+
+  InventoryFunctionsIamRole:
+    Description: "Implicit IAM Role created for inventory functions"
+    Value: !GetAtt InventoryFunctionsRole.Arn
+
+  # Step Function ARN
+  SagaStateMachineArn:
+    Description: Step Functions State Machine ARN
+    Value: !Ref SagaStateMachine
+
+  # DynamoDB Table ARN's
+  OrdersTableArn:
+    Description: "Orders table ARN"
+    Value: !GetAtt OrdersTable.Arn
+
+  PaymentsTableArn:
+    Description: "Payments table ARN"
+    Value: !GetAtt PaymentsTable.Arn
+  
+  InventoryTableArn:
+    Description: "Inventory table ARN"
+    Value: !GetAtt InventoryTable.Arn

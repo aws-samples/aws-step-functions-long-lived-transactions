@@ -1,0 +1,24 @@
+{
+  "order_id": "11328abd-368d-43fd-bd4f-db15b5b63951",
+  "order_date": "2018-10-19T10:50:16+08:00",
+  "customer_id": "8d04ea6f-c6b2-4422-8550-839a16f01feb",
+  "items": [{
+      "item_id": "189",
+      "qty": 1.0,
+      "description": "Cart item 1",
+      "unit_price": 19.99
+    },
+    {
+      "item_id": "28",
+      "qty": 1.0,
+      "description": "Cart item 2",
+      "unit_price": 23.98
+    },
+    {
+      "item_id": "322",
+      "qty": 2.0,
+      "description": "Cart item 3",
+      "unit_price": 6.50
+    }
+  ]
+}

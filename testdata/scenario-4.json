@@ -1,0 +1,12 @@
+{
+  "order_id": "22b0b599-441b-45c3-910e-ad63fe992c43",
+  "order_date": "2018-10-19T10:50:16+08:00",
+  "customer_id": "8d04ea6f-c6b2-4422-8550-839a16f01feb",
+  "items": [{
+    "item_id": "67",
+    "qty": 1.0,
+    "description": "Cart item 1",
+    "unit_price": 19.99
+  }
+  ]
+}
