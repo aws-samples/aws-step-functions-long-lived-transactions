@@ -57,9 +57,9 @@ Any state can encounter runtime errors. Errors can arise because of state machin
 ```json
 "Catch": [
   {
-        "ErrorEquals": ["ErrProcessOrder"],
-        "ResultPath": "$.error",
-        "Next": "UpdateOrderStatus"
+    "ErrorEquals": ["ErrProcessOrder"],
+    "ResultPath": "$.error",
+    "Next": "UpdateOrderStatus"
   }
 ]
 ```
@@ -84,7 +84,32 @@ When a	state reports an error, the interpreter scans through the Retriers and, w
 ]
 ```
 
-## Invoking your Step Function via CLI
+## Custom Errors
+
+The following is a list of all the custom errors thrown by the application and can be used in your state machine.
+
+* `ErrProcessOrder` represents a process order error
+* `ErrUpdateOrderStatus` represents a process order error
+* `ErrProcessPayment` represents a process payment error
+* `ErrProcessRefund` represents a process payment refund error
+* `ErrReserveInventory` represents a inventory update error
+* `ErrReleaseInventory` represents a inventory update reversal error
+
+## Testing Scenarios
+
+The AWS Step Functions implementation has been configured for you to be easily test the various scenarios of the saga implementation. Modifying your `order_id` with a specified prefix will trigger an error in the each Task.
+
+OrderID Prefix | Will error with | Example | Expected execution
+------------ | ------------- | --- | ---
+1 | ErrProcessOrder | 1ae4501d-ed92-4b27-bf0e-fd978ed45127 | ![1](images/paths-breakdown-1.png) 
+11 | ErrUpdateOrderStatus | 11328abd-368d-43fd-bd4f-db15b5b63951 | ![11](images/paths-breakdown-11.png)
+2 | ErrProcessPayment |  20b0b599-441b-45c3-910e-ad63fe992c43 | ![2](images/paths-breakdown-2.png)
+22 | ErrProcessRefund | 222f741b-0292-4f93-a2f7-503f92486955 | ![22](images/paths-breakdown-22.png)
+3 | ErrReserveInventory | 3a7dc768-6f32-495d-a140-3d330c246f50 | ![3](images/paths-breakdown-3.png)
+33 | ErrReleaseInventory | 33a49007-a815-4079-9b9b-e30ae7eca11f | ![3](images/paths-breakdown-33.png)
+4-9 | No error | 47063fe3-56d9-4c51-b91f-71929834ce03 | ![4-9](images/paths-breakdown-7.png)
+
+### Invoking your Step Function via CLI
 
 The AWS CLI command will trigger a execution of your state machine. Make sure you substitute the ARN for the state machine in your account. You can find the ARN in the AWS CloudFormation Output section or in the AWS Step Functions console.
 
@@ -95,46 +120,19 @@ The AWS CLI command will trigger a execution of your state machine. Make sure yo
 ``` bash
 aws stepfunctions start-execution \
     --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
-    --input "{\"order_id\": \"40063fe3-56d9-4c51-b91f-71929834ce03\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99    }]}" \
+    --input "{\"order_id\": \"40063fe3-56d9-4c51-b91f-71929834ce03\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99 }]}" \
     --region [AWS_REGION]
 ```
 
-## Exceptions
+[DOWNLOAD SCENARIO CLI COMMANDS](cli-commands.txt)
 
-The following is a list of all the exceptions thrown by the application and can be used in your state machine.
-
-* **ErrProcessOrder** represents a process order error
-* **ErrUpdateOrderStatus** represents a process order error
-* **ErrProcessPayment** represents a process payment error
-* **ErrProcessRefund** represents a process payment refund error
-* **ErrReserveInventory** represents a inventory update error
-* **ErrReleaseInventory** represents a inventory update reversal error
-
-## Testing Scenarios
-
-The AWS Step Functions implementation has been configured for you to be easily test the various scenarios of the saga implementation. Modifying your `order_id` with a specified prefix will trigger an error in the each Task.
-
-OrderID Prefix | Will error with | Example | Expected execution
------------- | ------------- | --- | ---
-1 | ErrProcessOrder | <pre>--input "{\"order_id\": \"1ae4501d-ed92-4b27-bf0e-fd978ed45127\",<br/>\"order_date\": \"2018-10-19T10:50:16+08:00\", <br/>\"customer_id\": \"0d52eeef-52a1-4e6e-a5b1-d0515121306c\", <br/>\"items\": [{ \"item_id\": \"929\", \"qty\": 3.0, <br/>\"description\": \"Cart item 1\", \"unit_price\": 9.99}]}"</pre> | ![1](images/paths-breakdown-1.png) 
-11 | ErrUpdateOrderStatus | <pre>--input "{\"order_id\": \"11328abd-368d-43fd-bd4f-db15b5b63951\", <br/>\"order_date\": \"2018-10-19T10:50:16+08:00\", <br/>\"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", <br/>\"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, <br/>\"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre> | ![11](images/paths-breakdown-11.png)
-2 | ErrProcessPayment | <pre>--input "{\"order_id\": \"20b0b599-441b-45c3-910e-ad63fe992c43\", <br/>\"order_date\": \"2018-10-19T10:50:16+08:00\", <br/>\"customer_id\": \"151ae48f-79b0-47b6-a8a6-bd8dbcf9af9a\", <br/>\"items\": [{ \"item_id\": \"423\", \"qty\": 10.0, <br/>\"description\": \"Cart item 1\", \"unit_price\": 34.99}]}"</pre> | ![2](images/paths-breakdown-2.png)
-22 | ErrProcessRefund | <pre>--input "{\"order_id\": \"222f741b-0292-4f93-a2f7-503f92486955 \", <br/>\"order_date\": \"2018-10-19T10:50:16+08:00\", <br/>\"customer_id\": \"227dd3c9-58ab-4f0d-958a-5ead5858fba8\", <br/>\"items\": [{ \"item_id\": \"655\", \"qty\": 2.0, <br/>\"description\": \"Cart item 1\", \"unit_price\": 99.99}]}"</pre>| ![22](images/paths-breakdown-22.png)
-3 | ErrReserveInventory | <pre>--input "{\"order_id\": \"3a7dc768-6f32-495d-a140-3d330c246f50\", <br/>\"order_date\": \"2018-10-19T10:50:16+08:00\", <br/>\"customer_id\": \"aa226136-bd50-4718-8e87-6962c8d34779\", <br/>\"items\": [{ \"item_id\": \"765\", \"qty\": 1.0, <br/>\"description\": \"Cart item 1\", \"unit_price\": 6.50}]}"</pre> | ![3](images/paths-breakdown-3.png)
-33 | ErrReleaseInventory | <pre>--input "{\"order_id\": \"33a49007-a815-4079-9b9b-e30ae7eca11f\", <br/>\"order_date\": \"2018-10-19T10:50:16+08:00\", <br/>\"customer_id\": \"39081ebf-16a9-4e2c-a88b-d1a4c76956fd\", <br/>\"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, <br/>\"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre> | ![3](images/paths-breakdown-33.png)
-4-9 | No error | <pre>--input "{\"order_id\": \"47063fe3-56d9-4c51-b91f-71929834ce03\", <br/>\"order_date\": \"2018-10-19T10:50:16+08:00\", <br/>\"customer_id\": \"3b27c7c4-7a3e-4635-aef9-6b5c74de6465\", <br/>\"items\": [{ \"item_id\": \"988\", \"qty\": 100.0, <br/>\"description\": \"Cart item 1\", \"unit_price\": 0.99}]}"</pre> | ![4-9](images/paths-breakdown-7.png)
-
-
-## Additional Resources
-
-### Step Functions
+## Additional Step Functions Resources
 
 * [AWS Step Functions](https://aws.amazon.com/step-functions/)
 * [AWS Step Functions Developer Guide](https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html)
 * [AWS Step Function Tutorials](https://docs.aws.amazon.com/step-functions/latest/dg/tutorials.html)
 * [statelint](https://github.com/awslabs/statelint)
 * [Amazon States Language](https://states-language.net/spec.html)
-
 
 ## How else can you implement this solution?
 
