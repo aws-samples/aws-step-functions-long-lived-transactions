@@ -6,47 +6,32 @@ This is a sample template for Managing Long Lived Transactions with AWS Step Fun
 
 ``` bash
 .
-├── Makefile                      <-- Make to automate build
-├── README.md
-├── docs                          <-- Workshop guide and setup instructions
+├── Makefile              <-- Make to automate build
+├── docs                  <-- Workshop guide and setup instructions
 │   ├── guide.md
 │   └── setup.md
 ├── inventory
-│   ├── release
-│   │   ├── main.go               <-- Lambda function code represents compensating transaction to release inventory
-│   │   └── main_test.go
-│   └── reserve
-│       ├── main.go               <-- Lambda function code represents task to reserve order items from the inventory
-│       └── main_test.go
-├── models                        <-- Models package that defines the types used by the various functions and state data
+│   ├── release           <-- Lambda function code represents compensating transaction to release inventory
+│   └── reserve           <-- Lambda function code represents task to reserve order items from the inventory
+├── models                <-- Models package that defines the types used by the various functions and state data
 │   ├── inventory.go
 │   ├── order.go
 │   └── payment.go
-├── order
+├── order                 <-- Lambda function code represents task to create a new order and set status to "new order"
 │   ├── new
-│   │   ├── main.go               <-- Lambda function code represents task to create a new order and set status to "new order"
-│   │   └── main_test.go
 │   └── update
-│       ├── main.go
-│       └── main_test.go
-├── packaged.yaml
 ├── payment
-│   ├── pay
-│   │   ├── main.go               <-- Lambda function code represents task to process financial transaction for the order
-│   │   └── main_test.go
-│   └── refund
-│       ├── main.go               <-- Lambda function code represents the compensating transaction to refund customer order
-│       └── main_test.go
-├── state-machine.json            <-- Sample saga implementation with Step Functions
-├── stepdiagram.png
-└── template.yaml                 <-- SAM template for defining and deploying serverless application resources.
-                                      [USE THIS AS A GUIDE IF YOU GET STUCK].
+│   ├── pay               <-- Lambda function code represents task to process financial transaction for the order
+│   └── refund            <-- Lambda function code represents the compensating transaction to refund customer order
+├── state-machine.json    <-- Sample saga implementation with Step Functions
+└── template.yaml         <-- SAM template for defining and deploying serverless application resources
+                              [USE THIS AS A GUIDE IF YOU GET STUCK]
 
 ```
 
 ## Amazon States Language
 
-A full description of the how to describe your state machine can be found on the [Amazon States Language](https://states-language.net/spec.html) specification page.
+A full description of the how to describe your state machine can be found on the Amazon States Language specification (see the resources section at the bottom of this page).
 
 Please review the "Templates" section in the [AWS Console](https://console.aws.amazon.com/states/home) for examples of how you can implement various states.
 
@@ -57,13 +42,12 @@ Please review the "Templates" section in the [AWS Console](https://console.aws.a
 The Task State (identified by "Type":"Task") causes the interpreter to execute the work identified by the state's “Resource” field.
 
 ```json
-"TaskName": {
-  "Comment": "Add comment...",
+"ProcessOrder": {
+  "Comment": "First transaction to save the order and set the order status to new",
   "Type": "Task",
-  "Resource": "AWS_LAMBDA_ARN",
-  "Next": "",
-  "TimeoutSeconds": 300,
-  "HeartbeatSeconds": 60
+  "Resource": "arn:aws:lambda:[REGION]:[ACCOUNT NUMBER]:function:aws-step-functions-long-lived-tra-NewOrderFunction-121DONKVIBL5T",
+  "TimeoutSeconds": 10,
+  "Next": "ProcessPayment"
 }
 ```
 
@@ -73,12 +57,9 @@ Any state can encounter runtime errors. Errors can arise because of state machin
 ```json
 "Catch": [
   {
-    "ErrorEquals": ["CustomError"],
-    "Next": ""
-  },
-  {
-    "ErrorEquals": ["States.ALL"],
-    "Next": ""
+        "ErrorEquals": ["ErrProcessOrder"],
+        "ResultPath": "$.error",
+        "Next": "UpdateOrderStatus"
   }
 ]
 ```
@@ -89,18 +70,16 @@ Task States and Parallel States MAY have a field named “Retry”, whose value 
 When a	state reports an error, the interpreter scans through the Retriers and, when the Error Name appears in the value of of a Retrier’s “ErrorEquals” field, implements the retry policy described in that Retrier.
 
 ```json
-"Retry": [
-  {
-    "ErrorEquals": ["CustomError"],
-    "IntervalSeconds": 1,
-    "MaxAttempts": 2,
-    "BackoffRate": 2.0
-  },
-  {
-    "ErrorEquals": ["States.ALL"],
-    "IntervalSeconds": 30,
-    "MaxAttempts": 2,
-    "BackoffRate": 2.0
+"Retry": [{
+  "ErrorEquals": ["States.ALL"],
+  "IntervalSeconds": 1,
+  "MaxAttempts": 2,
+  "BackoffRate": 2.0
+  }],
+  "Catch": [{
+    "ErrorEquals": ["ErrReleaseInventory"],
+    "ResultPath": "$.error",
+    "Next": "ReleaseInventoryFailed"
   }
 ]
 ```
@@ -117,7 +96,7 @@ The AWS CLI command will trigger a execution of your state machine. Make sure yo
 aws stepfunctions start-execution \
     --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
     --input "{\"order_id\": \"40063fe3-56d9-4c51-b91f-71929834ce03\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99    }]}" \
-    -- region [AWS_REGION]
+    --region [AWS_REGION]
 ```
 
 ## Exceptions
@@ -137,13 +116,24 @@ The AWS Step Functions implementation has been configured for you to be easily t
 
 OrderID Prefix | Will error with | Example | Expected execution
 ------------ | ------------- | --- | ---
-1 | ErrProcessOrder | 1ae4501d-ed92-4b27-bf0e-fd978ed45127 | ![1](images/paths-breakdown-1.png) 
-11 | ErrUpdateOrderStatus | 11328abd-368d-43fd-bd4f-db15b5b63951 | ![11](images/paths-breakdown-11.png)
-2 | ErrProcessPayment | 20b0b599-441b-45c3-910e-ad63fe992c43 | ![2](images/paths-breakdown-2.png)
-22 | ErrProcessRefund | 222f741b-0292-4f93-a2f7-503f92486955 | ![22](images/paths-breakdown-22.png)
-3 | ErrReserveInventory | 3a7dc768-6f32-495d-a140-3d330c246f50 | ![3](images/paths-breakdown-3.png)
-33 | ErrReleaseInventory | 33a49007-a815-4079-9b9b-e30ae7eca11f | ![3](images/paths-breakdown-33.png)
-4 | No error | Order IDs beginning with 4 - 9 will pass successfully. For example:<br>47063fe3-56d9-4c51-b91f-71929834ce03<br>875e6c0a-9cd1-448d-94be-1f110fc3e5b3<br>9c57e9ae-966b-49d3-8b9f-5ba04cfe2533| ![4-9](images/paths-breakdown-7.png)
+1 | ErrProcessOrder | <pre>--input "{\"order_id\": \"1ae4501d-ed92-4b27-bf0e-fd978ed45127\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre> | ![1](images/paths-breakdown-1.png) 
+11 | ErrUpdateOrderStatus | <pre>--input "{\"order_id\": \"11328abd-368d-43fd-bd4f-db15b5b63951\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre> | ![11](images/paths-breakdown-11.png)
+2 | ErrProcessPayment | <pre>--input "{\"order_id\": \"20b0b599-441b-45c3-910e-ad63fe992c43\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre> | ![2](images/paths-breakdown-2.png)
+22 | ErrProcessRefund | <pre>--input "{\"order_id\": \"222f741b-0292-4f93-a2f7-503f92486955 \", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre>| ![22](images/paths-breakdown-22.png)
+3 | ErrReserveInventory | <pre>--input "{\"order_id\": \"3a7dc768-6f32-495d-a140-3d330c246f50\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre> | ![3](images/paths-breakdown-3.png)
+33 | ErrReleaseInventory | <pre>--input "{\"order_id\": \"33a49007-a815-4079-9b9b-e30ae7eca11f\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre> | ![3](images/paths-breakdown-33.png)
+4-9 | No error | <pre>--input "{\"order_id\": \"47063fe3-56d9-4c51-b91f-71929834ce03\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99}]}"</pre> | ![4-9](images/paths-breakdown-7.png)
+
+
+## Additional Resources
+
+### Step Functions
+
+* [AWS Step Functions](https://aws.amazon.com/step-functions/)
+* [AWS Step Functions Developer Guide](https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html)
+* [AWS Step Function Tutorials](https://docs.aws.amazon.com/step-functions/latest/dg/tutorials.html)
+* [statelint](https://github.com/awslabs/statelint)
+* [Amazon States Language](https://states-language.net/spec.html)
 
 ## How else can you implement this solution?
 
