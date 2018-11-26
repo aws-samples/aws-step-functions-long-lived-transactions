@@ -126,110 +126,13 @@ Resources:
         RoleArn: !GetAtt StepFunctionsServiceRole.Arn
         DefinitionString: !Sub |-
           {
-            "Comment": "",
+            "Comment": "re:Invent 2018 Builder Session - Managing Long Lived Transactions with AWS Step Functions State Machine",
             "StartAt": "ProcessOrder",
             "States": {
               "ProcessOrder": {
                 "Comment": "First transaction to save the order and set the order status to new",
-                "Type": "Task",
-                "Resource": "${NewOrderFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Catch": [{
-                  "ErrorEquals": ["ErrProcessOrder"],
-                  "ResultPath": "$.error",
-                  "Next": "UpdateOrderStatus"
-                }],
-                "Next": "ProcessPayment"
-              },
-              "ProcessPayment": {
-                "Comment": "Task processes the order payment",
-                "Type": "Task",
-                "Resource": "${ProcessPaymentFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Catch": [{
-                  "ErrorEquals": ["ErrProcessPayment"],
-                  "ResultPath": "$.error",
-                  "Next": "ProcessRefund"
-                }],
-                "Next": "ReserveInventory"
-              },
-              "ReserveInventory": {
-                "Comment": "Task to reserve order items in inventory",
-                "Type": "Task",
-                "Resource": "${ReserveInventoryFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Catch": [{
-                  "ErrorEquals": ["ErrReserveInventory"],
-                  "ResultPath": "$.error",
-                  "Next": "ReleaseInventory"
-                }],
-                "Next": "OrderSucceeded"
-              },
-              "OrderSucceeded": {
-                "Type": "Succeed"
-              },
-              "ReleaseInventory": {
-                "Comment": "Task to release order items back to inventory",
-                "Type": "Task",
-                "Resource": "${ReleaseInventoryFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Retry": [{
-                  "ErrorEquals": ["States.ALL"],
-                  "IntervalSeconds": 1,
-                  "MaxAttempts": 2,
-                  "BackoffRate": 2.0
-                  }],
-                  "Catch": [{
-                    "ErrorEquals": ["ErrReleaseInventory"],
-                    "ResultPath": "$.error",
-                    "Next": "ReleaseInventoryFailed"
-                  }
-                ],
-                "Next": "ProcessRefund"
-              },
-              "ReleaseInventoryFailed": {
-                "Type": "Fail"
-              },
-              "ProcessRefund": {
-                "Comment": "Task to process order refund",
-                "Type": "Task",
-                "Resource": "${ProcessRefundFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Retry": [{
-                  "ErrorEquals": ["States.TaskFailed"],
-                  "IntervalSeconds": 1,
-                  "MaxAttempts": 2,
-                  "BackoffRate": 2.0
-                  }],
-                  "Catch": [{
-                    "ErrorEquals": ["ErrProcessRefund"],
-                    "ResultPath": "$.error",
-                    "Next": "ProcessRefundFailed"
-                  }
-                ],
-                "Next": "UpdateOrderStatus"
-              },
-              "ProcessRefundFailed": {
-                "Type": "Fail"
-              },
-              "UpdateOrderStatus": {
-                "Comment": "Task sets the order status to Pending.",
-                "Type": "Task",
-                "Resource": "${UpdateOrderFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Catch": [{
-                    "ErrorEquals": ["ErrUpdateOrderStatus"],
-                    "ResultPath": "$.error",
-                    "Next": "UpdateOrderStatusFailed"
-                  }
-                ],
-                "Next": "UpdateOrderStatusSucceeded"
-              },
-              "UpdateOrderStatusFailed": {
-                "Type": "Fail"
-              },
-              "UpdateOrderStatusSucceeded": {
-                "Type": "Succeed"
+                "Type": "Pass",
+                "End": true
               }
             }
           }
