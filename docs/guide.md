@@ -24,14 +24,13 @@ This is a sample template for Managing Long Lived Transactions with AWS Step Fun
 │   ├── pay               <-- Lambda function code represents task to process financial transaction for the order
 │   └── refund            <-- Lambda function code represents the compensating transaction to refund customer order
 ├── state-machine.json    <-- Sample saga implementation with Step Functions
+│                             [USE THIS AS A GUIDE IF YOU GET STUCK]
 └── template.yaml         <-- SAM template for defining and deploying serverless application resources
-                              [USE THIS AS A GUIDE IF YOU GET STUCK]
-
 ```
 
 ## Amazon States Language
 
-A full description of the how to describe your state machine can be found on the Amazon States Language specification (see the resources section at the bottom of this page).
+A full description of the how to describe your state machine can be found on the [Amazon States Language specification](https://states-language.net/spec.html).
 
 Please review the "Templates" section in the [AWS Console](https://console.aws.amazon.com/states/home) for examples of how you can implement various states.
 
