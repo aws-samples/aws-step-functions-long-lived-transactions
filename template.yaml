@@ -128,6 +128,7 @@ Resources:
           {
             "Comment": "re:Invent 2018 Builder Session - Managing Long Lived Transactions with AWS Step Functions State Machine",
             "StartAt": "ProcessOrder",
+            "TimeoutSeconds": 15,
             "States": {
               "ProcessOrder": {
                 "Comment": "First transaction to save the order and set the order status to new",
@@ -136,7 +137,6 @@ Resources:
               }
             }
           }
-
 
 ########  ##    ## ##    ##    ###    ##     ##  #######  ########  ########  
 ##     ##  ##  ##  ###   ##   ## ##   ###   ### ##     ## ##     ## ##     ## 
@@ -228,6 +228,60 @@ Resources:
         - Key: session
           Value: Managing Long Lived Transactions with AWS Step Functions
 
+
+ ######  ##    ##  ######  
+##    ## ###   ## ##    ## 
+##       ####  ## ##       
+ ######  ## ## ##  ######  
+      ## ##  ####       ## 
+##    ## ##   ### ##    ## 
+ ######  ##    ##  ######  
+  SagaTopic:
+    Type: AWS::SNS::Topic
+    Properties: 
+      Subscription:
+        - Endpoint: sliedig@amazon.com
+          Protocol: email
+        - Endpoint: !GetAtt SagaQueue.Arn
+          Protocol: sqs
+          
+
+ ######   #######   ######  
+##    ## ##     ## ##    ## 
+##       ##     ## ##       
+ ######  ##     ##  ######  
+      ## ##  ## ##       ## 
+##    ## ##    ##  ##    ## 
+ ######   ##### ##  ######  
+
+  SagaQueue: 
+    Type: AWS::SQS::Queue
+    Properties: 
+      Tags:
+        - Key: project
+          Value: reInvent2018
+        - Key: session
+          Value: Managing Long Lived Transactions with AWS Step Functions
+
+  SagaQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Allow-SendMessage
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: 
+            - sqs:SendMessage
+            Resource: !GetAtt SagaQueue.Arn
+            Condition:
+              ArnEquals:
+                'aws:SourceArn': !Ref SagaTopic
+      Queues:
+        - !Ref SagaQueue     
+
 ####    ###    ##     ## 
  ##    ## ##   ###   ### 
  ##   ##   ##  #### #### 
@@ -267,6 +321,24 @@ Resources:
                 - !Sub ${ProcessRefundFunction.Arn}
                 - !Sub ${ReserveInventoryFunction.Arn}
                 - !Sub ${ReleaseInventoryFunction.Arn}
+        - PolicyName: "SqsServiceIntegration"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: "Allow"
+              Action:
+                - "sqs:SendMessage"
+              Resource: 
+                - !GetAtt SagaQueue.Arn
+        - PolicyName: "SnsServiceIntegration"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: "Allow"
+              Action:
+                - "sns:Publish"
+              Resource: 
+                - !Ref SagaTopic
 
   InventoryFunctionsRole:
     Type: "AWS::IAM::Role"

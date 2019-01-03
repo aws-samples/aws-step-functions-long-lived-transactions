@@ -28,7 +28,7 @@ AWS Step Functions provide us with a mechanism for dealing with long-lived trans
 
 You are creating an e-commerce application and are processing an order. This requires you to update order status, process a credit card transaction and update inventory levels. Each state integrates with a different backend with its own local transaction. You need to treat these as a single, distributed transaction.
 
-![Saga with Step Functions](docs/images/stepdiagram.png)
+![Saga with Step Functions](docs/images/stepdiagram2.png)
 
 ## Learning Objectives
 

@@ -1,6 +1,7 @@
 {
   "Comment": "re:Invent 2018 Builder Session - Managing Long Lived Transactions with AWS Step Functions State Machine",
   "StartAt": "ProcessOrder",
+  "TimeoutSeconds": 15,
   "States": {
     "ProcessOrder": {
       "Comment": "First transaction to save the order and set the order status to new",
@@ -36,6 +37,16 @@
         "ResultPath": "$.error",
         "Next": "ReleaseInventory"
       }],
+      "Next": "sns:NotifySuccess"
+    },
+    "sns:NotifySuccess": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "Message.$": "$.order_id",
+        "TopicArn": "${SagaTopic}"
+      },
+      "ResultPath": "$.notification",
       "Next": "OrderSucceeded"
     },
     "OrderSucceeded": {
@@ -51,17 +62,23 @@
         "IntervalSeconds": 1,
         "MaxAttempts": 2,
         "BackoffRate": 2.0
-        }],
-        "Catch": [{
-          "ErrorEquals": ["ErrReleaseInventory"],
-          "ResultPath": "$.error",
-          "Next": "ReleaseInventoryFailed"
-        }
-      ],
+      }],
+      "Catch": [{
+        "ErrorEquals": ["ErrReleaseInventory"],
+        "ResultPath": "$.error",
+        "Next": "sns:NotifyReleaseInventoryFail"
+      }],
       "Next": "ProcessRefund"
     },
-    "ReleaseInventoryFailed": {
-      "Type": "Fail"
+    "sns:NotifyReleaseInventoryFail": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "Message.$": "$.order_id",
+        "TopicArn": "${SagaTopic}"
+      },
+      "ResultPath": "$.notification",
+      "Next": "OrderFailed"
     },
     "ProcessRefund": {
       "Comment": "Task to process order refund",
@@ -73,17 +90,23 @@
         "IntervalSeconds": 1,
         "MaxAttempts": 2,
         "BackoffRate": 2.0
-        }],
-        "Catch": [{
-          "ErrorEquals": ["ErrProcessRefund"],
-          "ResultPath": "$.error",
-          "Next": "ProcessRefundFailed"
-        }
-      ],
+      }],
+      "Catch": [{
+        "ErrorEquals": ["ErrProcessRefund"],
+        "ResultPath": "$.error",
+        "Next": "sns:NotifyProcessRefundFail"
+      }],
       "Next": "UpdateOrderStatus"
     },
-    "ProcessRefundFailed": {
-      "Type": "Fail"
+    "sns:NotifyProcessRefundFail": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "Message.$": "$.order_id",
+        "TopicArn": "${SagaTopic}"
+      },
+      "ResultPath": "$.notification",
+      "Next": "OrderFailed"
     },
     "UpdateOrderStatus": {
       "Comment": "Task sets the order status to Pending.",
@@ -91,18 +114,24 @@
       "Resource": "${UpdateOrderFunction.Arn}",
       "TimeoutSeconds": 10,
       "Catch": [{
-          "ErrorEquals": ["ErrUpdateOrderStatus"],
-          "ResultPath": "$.error",
-          "Next": "UpdateOrderStatusFailed"
-        }
-      ],
-      "Next": "UpdateOrderStatusSucceeded"
+        "ErrorEquals": ["ErrUpdateOrderStatus"],
+        "ResultPath": "$.error",
+        "Next": "sns:NotifyUpdateOrderFail"
+      }],
+      "Next": "sns:NotifyUpdateOrderFail"
     },
-    "UpdateOrderStatusFailed": {
+    "sns:NotifyUpdateOrderFail": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "Message.$": "$.order_id",
+        "TopicArn": "${SagaTopic}"
+      },
+      "ResultPath": "$.notification",
+      "Next": "OrderFailed"
+    },
+    "OrderFailed": {
       "Type": "Fail"
-    },
-    "UpdateOrderStatusSucceeded": {
-      "Type": "Succeed"
     }
   }
 }
