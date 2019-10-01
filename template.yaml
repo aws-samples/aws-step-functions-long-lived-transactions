@@ -124,7 +124,7 @@ Resources:
       Properties:
         StateMachineName: !Ref "AWS::StackName"
         RoleArn: !GetAtt StepFunctionsServiceRole.Arn
-        DefinitionString: !Sub |-
+        DefinitionString: |-
           {
             "Comment": "re:Invent 2018 Builder Session - Managing Long Lived Transactions with AWS Step Functions State Machine",
             "StartAt": "ProcessOrder",
@@ -174,8 +174,8 @@ Resources:
       - AttributeName: "transaction_id"
         KeyType: "HASH"
       ProvisionedThroughput:
-        ReadCapacityUnits: "5"
-        WriteCapacityUnits: "5"
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
       GlobalSecondaryIndexes:
       - IndexName: "orderIDIndex"
         KeySchema:
@@ -186,8 +186,8 @@ Resources:
         Projection:
           ProjectionType: "ALL"
         ProvisionedThroughput:
-          ReadCapacityUnits: "1"
-          WriteCapacityUnits: "1"
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
       Tags:
       - Key: project
         Value: reInvent2018
@@ -208,8 +208,8 @@ Resources:
         - AttributeName: "transaction_id"
           KeyType: "HASH"
       ProvisionedThroughput:
-        ReadCapacityUnits: "5"
-        WriteCapacityUnits: "5"
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
       GlobalSecondaryIndexes:
         - IndexName: "orderIDIndex"
           KeySchema:
@@ -220,8 +220,8 @@ Resources:
           Projection:
             ProjectionType: "ALL"
           ProvisionedThroughput:
-            ReadCapacityUnits: "1"
-            WriteCapacityUnits: "1"
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
       Tags:
         - Key: project
           Value: reInvent2018
