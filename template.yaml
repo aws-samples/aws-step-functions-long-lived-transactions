@@ -240,8 +240,6 @@ Resources:
     Type: AWS::SNS::Topic
     Properties: 
       Subscription:
-        - Endpoint: sliedig@amazon.com
-          Protocol: email
         - Endpoint: !GetAtt SagaQueue.Arn
           Protocol: sqs
           
