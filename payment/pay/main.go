@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/aws-samples/aws-step-functions-long-lived-transactions/models"
+	"aws-step-functions-long-lived-transactions/models"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"

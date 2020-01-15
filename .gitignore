@@ -2,7 +2,7 @@
 tmp
 out.txt
 packaged.yaml
-*/**/main
+*/**/build
 
 # Created by https://www.gitignore.io/api/go,visualstudiocode
 

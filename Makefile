@@ -4,7 +4,7 @@ S3_BUCKET := $(S3_BUCKET)
 STACK_NAME := $(STACK_NAME)
 TEMPLATE = template.yaml
 
-.PHONY: install test clean build package
+.PHONY: install test clean build lambda teardown package
 
 install:
 		go get -u ./...
@@ -15,27 +15,25 @@ test:
 clean:
 		echo "Begin cleaning..."
 		rm -f */**/$(OUTPUT) $(PACKAGED_TEMPLATE)
+		$(MAKE) clean -C inventory/release
+	 	$(MAKE) clean -C inventory/reserve
+	 	$(MAKE) clean -C order/new
+	 	$(MAKE) clean -C order/update
+	 	$(MAKE) clean -C payment/pay
+	 	$(MAKE) clean -C payment/refund
 		echo "Done cleaning..."
 
-build:  clean
-		echo "Begin release build..."
-		GOOS=linux GOARCH=amd64 go build -o ./order/new/main ./order/new
-		GOOS=linux GOARCH=amd64 go build -o ./order/update/main ./order/update
-		GOOS=linux GOARCH=amd64 go build -o ./payment/pay/main ./payment/pay
-		GOOS=linux GOARCH=amd64 go build -o ./payment/refund/main ./payment/refund
-		GOOS=linux GOARCH=amd64 go build -o ./inventory/reserve/main ./inventory/reserve
-		GOOS=linux GOARCH=amd64 go build -o ./inventory/release/main ./inventory/release
-		echo "Done release build."
+lambda:
+	echo "Begin release build..."
+	$(MAKE) -C inventory/release
+	$(MAKE) -C inventory/reserve
+	$(MAKE) -C order/new
+	$(MAKE) -C order/update
+	$(MAKE) -C payment/pay
+	$(MAKE) -C payment/refund
+	echo "Done release build."
 
-debug:
-		echo "Begin debug build..."
-		GOARCH=amd64 GOOS=linux go build -gcflags='-N -l' -o ./order/new/main ./order/new
-		GOARCH=amd64 GOOS=linux go build -gcflags='-N -l' -o ./order/update/main ./order/update
-		GOARCH=amd64 GOOS=linux go build -gcflags='-N -l' -o ./payment/pay/main ./payment/pay
-		GOARCH=amd64 GOOS=linux go build -gcflags='-N -l' -o ./payment/refund/main ./payment/refund
-		GOARCH=amd64 GOOS=linux go build -gcflags='-N -l' -o ./inventory/reserve/main ./inventory/reserve
-		GOARCH=amd64 GOOS=linux go build -gcflags='-N -l' -o ./inventory/release/main ./inventory/release
-		echo "Done debug build."
+build:  clean lambda
 
 deploy: build
 	sam package \
@@ -47,3 +45,7 @@ deploy: build
     --template-file $(PACKAGED_TEMPLATE) \
     --stack-name $(STACK_NAME) \
     --capabilities CAPABILITY_IAM
+
+.PHONY: teardown
+teardown:
+	aws cloudformation delete-stack --stack-name $(STACK_NAME)

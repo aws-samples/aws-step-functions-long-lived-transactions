@@ -6,15 +6,14 @@ import (
 	"log"
 	"os"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-xray-sdk-go/xray"
-
-	"github.com/aws-samples/aws-step-functions-long-lived-transactions/models"
+	"aws-step-functions-long-lived-transactions/models" // local
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/aws/aws-xray-sdk-go/xray"
 )
 
 var dynamoDB *dynamodb.DynamoDB

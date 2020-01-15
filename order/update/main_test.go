@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aws-samples/aws-step-functions-long-lived-transactions/models"
+	"aws-step-functions-long-lived-transactions/models"
 	"github.com/stretchr/testify/assert"
 )
 
