@@ -124,7 +124,7 @@ Resources:
       Properties:
         StateMachineName: !Ref "AWS::StackName"
         RoleArn: !GetAtt StepFunctionsServiceRole.Arn
-        DefinitionString: !Sub |-
+        DefinitionString: |-
           {
             "Comment": "re:Invent 2018 Builder Session - Managing Long Lived Transactions with AWS Step Functions State Machine",
             "StartAt": "ProcessOrder",
@@ -132,133 +132,8 @@ Resources:
             "States": {
               "ProcessOrder": {
                 "Comment": "First transaction to save the order and set the order status to new",
-                "Type": "Task",
-                "Resource": "${NewOrderFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Catch": [{
-                            "ErrorEquals": ["ErrProcessOrder"],
-                            "ResultPath": "$.error",
-                            "Next": "UpdateOrderStatus"
-                          }],
-                "Next": "ProcessPayment"
-              },
-              "ProcessPayment": {
-                "Comment": "Task processes the order payment",
-                "Type": "Task",
-                "Resource": "${ProcessPaymentFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Catch": [{
-                            "ErrorEquals": ["ErrProcessPayment"],
-                            "ResultPath": "$.error",
-                            "Next": "ProcessRefund"
-                          }],
-                "Next": "ReserveInventory"
-              },
-              "ReserveInventory": {
-                "Comment": "Task to reserve order items in inventory",
-                "Type": "Task",
-                "Resource": "${ReserveInventoryFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Catch": [{
-                            "ErrorEquals": ["ErrReserveInventory"],
-                            "ResultPath": "$.error",
-                            "Next": "ReleaseInventory"
-                          }],
-                "Next": "sns:NotifySuccess"
-              },
-              "sns:NotifySuccess": {
-                "Type": "Task",
-                "Resource": "arn:aws:states:::sns:publish",
-                "Parameters": {
-                  "Message.$": "$.order_id",
-                  "TopicArn": "${SagaTopic}"
-                },
-                "ResultPath": "$.notification",
-                "Next": "OrderSucceeded"
-              },
-              "OrderSucceeded": {
-                "Type": "Succeed"
-              },
-              "ReleaseInventory": {
-                "Comment": "Task to release order items back to inventory",
-                "Type": "Task",
-                "Resource": "${ReleaseInventoryFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Retry": [{
-                            "ErrorEquals": ["States.ALL"],
-                            "IntervalSeconds": 1,
-                            "MaxAttempts": 2,
-                            "BackoffRate": 2.0
-                          }],
-                "Catch": [{
-                            "ErrorEquals": ["ErrReleaseInventory"],
-                            "ResultPath": "$.error",
-                            "Next": "sns:NotifyReleaseInventoryFail"
-                          }],
-                "Next": "ProcessRefund"
-              },
-              "sns:NotifyReleaseInventoryFail": {
-                "Type": "Task",
-                "Resource": "arn:aws:states:::sns:publish",
-                "Parameters": {
-                  "Message.$": "$.order_id",
-                  "TopicArn": "${SagaTopic}"
-                },
-                "ResultPath": "$.notification",
-                "Next": "OrderFailed"
-              },
-              "ProcessRefund": {
-                "Comment": "Task to process order refund",
-                "Type": "Task",
-                "Resource": "${ProcessRefundFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Retry": [{
-                            "ErrorEquals": ["States.TaskFailed"],
-                            "IntervalSeconds": 1,
-                            "MaxAttempts": 2,
-                            "BackoffRate": 2.0
-                          }],
-                "Catch": [{
-                            "ErrorEquals": ["ErrProcessRefund"],
-                            "ResultPath": "$.error",
-                            "Next": "sns:NotifyProcessRefundFail"
-                          }],
-                "Next": "UpdateOrderStatus"
-              },
-              "sns:NotifyProcessRefundFail": {
-                "Type": "Task",
-                "Resource": "arn:aws:states:::sns:publish",
-                "Parameters": {
-                  "Message.$": "$.order_id",
-                  "TopicArn": "${SagaTopic}"
-                },
-                "ResultPath": "$.notification",
-                "Next": "OrderFailed"
-              },
-              "UpdateOrderStatus": {
-                "Comment": "Task sets the order status to Pending.",
-                "Type": "Task",
-                "Resource": "${UpdateOrderFunction.Arn}",
-                "TimeoutSeconds": 10,
-                "Catch": [{
-                            "ErrorEquals": ["ErrUpdateOrderStatus"],
-                            "ResultPath": "$.error",
-                            "Next": "sns:NotifyUpdateOrderFail"
-                          }],
-                "Next": "sns:NotifyUpdateOrderFail"
-              },
-              "sns:NotifyUpdateOrderFail": {
-                "Type": "Task",
-                "Resource": "arn:aws:states:::sns:publish",
-                "Parameters": {
-                  "Message.$": "$.order_id",
-                  "TopicArn": "${SagaTopic}"
-                },
-                "ResultPath": "$.notification",
-                "Next": "OrderFailed"
-              },
-              "OrderFailed": {
-                "Type": "Fail"
+                "Type": "Pass",
+                "End": true
               }
             }
           }
