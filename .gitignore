@@ -1,4 +1,6 @@
 .idea/
+.aws-sam/
+samconfig.toml
 tmp
 out.txt
 packaged.yaml
@@ -35,4 +37,4 @@ packaged.yaml
 # End of https://www.gitignore.io/api/go,visualstudiocode
 
 
-.aws-sam/
+
