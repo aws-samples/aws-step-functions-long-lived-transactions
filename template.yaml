@@ -381,55 +381,6 @@ Resources:
   ##  ######### ##     ##
   ##  ##     ## ##     ##
   #### ##     ## ##     ##
-  StepFunctionsServiceRole:
-    Type: "AWS::IAM::Role"
-    Properties:
-      Path: !Join ["", ["/", !Ref "AWS::StackName", "/"]]
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AWSStepFunctionsFullAccess"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: "AllowStepFunctionsServiceToAssumeRole"
-            Effect: "Allow"
-            Action:
-              - "sts:AssumeRole"
-            Principal:
-              Service:
-                - !Sub "states.${AWS::Region}.amazonaws.com"
-      Policies:
-        - PolicyName: "CallLambdaFunctions"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                  - "lambda:InvokeFunction"
-                Resource:
-                  # - !Sub ${NewOrderFunction.Arn}
-                  # - !Sub ${UpdateOrderFunction.Arn}
-                  - !Sub ${DebitPaymentFunction.Arn}
-                  - !Sub ${CreditPaymentFunction.Arn}
-                  # - !Sub ${ReserveInventoryFunction.Arn}
-                  # - !Sub ${ReleaseInventoryFunction.Arn}
-        - PolicyName: "SqsServiceIntegration"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                  - "sqs:SendMessage"
-                Resource:
-                  - !GetAtt SagaQueue.Arn
-        - PolicyName: "SnsServiceIntegration"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                  - "sns:Publish"
-                Resource:
-                  - !Ref SagaTopic
 
   InventoryFunctionsRole:
     Type: "AWS::IAM::Role"
