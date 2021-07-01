@@ -1,16 +1,14 @@
 module aws-step-functions-long-lived-transactions/order/new
 
-go 1.13
+go 1.16
 
 require (
 	aws-step-functions-long-lived-transactions/models v0.0.0-00010101000000-000000000000
-	github.com/aws-samples/aws-step-functions-long-lived-transactions v0.0.0-20191001081655-c5ca1f79a412 // indirect
-	github.com/aws/aws-lambda-go v1.13.2
-	github.com/aws/aws-sdk-go v1.25.26
-	github.com/aws/aws-xray-sdk-go v1.0.0-rc.14
-	github.com/cihub/seelog v0.0.0-20170130134532-f561c5e57575
-	github.com/stretchr/testify v1.4.0
-	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
+	github.com/aws/aws-lambda-go v1.24.0
+	github.com/aws/aws-sdk-go v1.38.69
+	github.com/aws/aws-xray-sdk-go v1.5.0
+	github.com/stretchr/testify v1.7.0
+	golang.org/x/net v0.0.0-20210614182718-04defd469f4e // indirect
 )
 
 replace aws-step-functions-long-lived-transactions/models => ../../models
