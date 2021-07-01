@@ -168,7 +168,10 @@ Resources:
         ReleaseInventoryFunction: !GetAtt ReleaseInventoryFunction.Arn
         DebitPaymentFunction: !GetAtt DebitPaymentFunction.Arn
         CreditPaymentFunction: !GetAtt CreditPaymentFunction.Arn
+        SagaTopic: !Ref SagaTopic
       Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt SagaTopic.TopicName
         - LambdaInvokePolicy:
             FunctionName: !Ref NewOrderFunction
         - LambdaInvokePolicy:
