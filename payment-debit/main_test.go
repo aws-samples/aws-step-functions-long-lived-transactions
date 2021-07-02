@@ -15,8 +15,8 @@ import (
 )
 
 // Test Orders
-var scenarioErrProcessPayment = "../../testdata/scenario-3.json"
-var scenarioSuccessfulOrder = "../../testdata/scenario-7.json"
+var scenarioErrProcessPayment = "../testdata/scenario-3.json"
+var scenarioSuccessfulOrder = "../testdata/scenario-7.json"
 
 func TestHandler(t *testing.T) {
 	assert := assert.New(t)

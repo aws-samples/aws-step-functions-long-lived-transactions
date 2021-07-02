@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var scenarioErrProcessOrder = "../../testdata/scenario-1.json"
-var scenarioSuccessfulOrder = "../../testdata/scenario-7.json"
+var scenarioErrProcessOrder = "../testdata/scenario-1.json"
+var scenarioSuccessfulOrder = "../testdata/scenario-7.json"
 
 func TestHandler(t *testing.T) {
 	assert := assert.New(t)
