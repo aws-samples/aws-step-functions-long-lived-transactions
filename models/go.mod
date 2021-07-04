@@ -1,4 +1,4 @@
-module models
+module aws-step-functions-long-lived-transactions/models
 
 go 1.16
 
