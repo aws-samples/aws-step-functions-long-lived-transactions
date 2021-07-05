@@ -6,26 +6,39 @@ This is a sample template for Managing Long Lived Transactions with AWS Step Fun
 
 ``` bash
 .
-├── Makefile              <-- Make to automate build
-├── docs                  <-- Workshop guide and setup instructions
-│   ├── guide.md
-│   └── setup.md
-├── inventory
-│   ├── release           <-- Lambda function code represents compensating transaction to release inventory
-│   └── reserve           <-- Lambda function code represents task to reserve order items from the inventory
-├── models                <-- Models package that defines the types used by the various functions and state data
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── README.md
+├── docs                    <-- # Workshop guide and setup instructions
+├── inventory-release       <-- # Lambda function code represents compensating transaction to release inventory
+│   ├── ...
+│   └── main.go
+├── inventory-reserve       <-- # Lambda function code represents compensating transaction to release inventory
+│   ├── ...
+│   └── main.go
+├── models                  <-- # Models package that defines the types used by the various functions and state data
+│   ├── ...
 │   ├── inventory.go
 │   ├── order.go
 │   └── payment.go
-├── order                 <-- Lambda function code represents task to create a new order and set status to "new order"
-│   ├── new
-│   └── update
-├── payment
-│   ├── pay               <-- Lambda function code represents task to process financial transaction for the order
-│   └── refund            <-- Lambda function code represents the compensating transaction to refund customer order
-├── state-machine.json    <-- Sample saga implementation with Step Functions
-│                             [USE THIS AS A GUIDE IF YOU GET STUCK]
-└── template.yaml         <-- SAM template for defining and deploying serverless application resources
+├── order-new               <-- # Lambda function code represents task to create a new order and set status to "new order"           
+│   ├── ...  
+│   └── main.go
+├── order-update            <-- # Lambda function code represents compensating transaction for orders. 
+│   ├── ...                     # Sets order status to "pending"
+│   └── main.go                                
+├── payment-credit          <-- # Lambda function code represents the compensating transaction to refund customer order
+│   ├── ...
+│   └── main.go
+├── payment-debit           <-- # Lambda function code represents task to process financial transaction for the order
+│   ├── ...
+│   └── main.go
+├── statemachine
+│   └── llt.asl.yaml        <-- # Step Functions ASL template
+├── template.yaml           <-- # AWS SAM template for defining and deploying serverless application resources
+└── ...
+
 ```
 
 ## Amazon States Language
@@ -123,15 +136,7 @@ aws stepfunctions start-execution \
     --region [AWS_REGION]
 ```
 
-[DOWNLOAD SCENARIO CLI COMMANDS](cli-commands.txt)
-
-## Additional Step Functions Resources
-
-* [AWS Step Functions](https://aws.amazon.com/step-functions/)
-* [AWS Step Functions Developer Guide](https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html)
-* [AWS Step Function Tutorials](https://docs.aws.amazon.com/step-functions/latest/dg/tutorials.html)
-* [statelint](https://github.com/awslabs/statelint)
-* [Amazon States Language](https://states-language.net/spec.html)
+**[DOWNLOAD SCENARIO CLI COMMANDS](cli-commands.txt)**
 
 ## How else can you implement this solution?
 

@@ -1,4 +1,9 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
 .idea/
+.aws-sam/
+samconfig.toml
 tmp
 out.txt
 packaged.yaml
@@ -33,5 +38,6 @@ packaged.yaml
 
 
 # End of https://www.gitignore.io/api/go,visualstudiocode
+
 
 

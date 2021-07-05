@@ -1,5 +1,5 @@
-module models
+module aws-step-functions-long-lived-transactions/models
 
-go 1.13
+go 1.16
 
-require github.com/gofrs/uuid v3.2.0+incompatible
+require github.com/gofrs/uuid v4.0.0+incompatible
