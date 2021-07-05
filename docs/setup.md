@@ -66,10 +66,16 @@ cd $GOPATH/src/github.com/aws-samples
 git clone https://github.com/aws-samples/aws-step-functions-long-lived-transactions.git
 ```
 
+once you have done that download and install the dependencies for the project. From the project root run:
+
+```shell
+go get -u ./...
+```
+
 ### Deploy the sample application
 To build and deploy your application for the first time, run the following in your shell:
 
-``` bash
+```shell
 sam build
 sam deploy --guided
 
@@ -121,6 +127,6 @@ See the [Session Guide](guide.md) for more information.
 
 To delete the sample application that you created, use the AWS CLI. Assuming you used your project name for the stack name, you can run the following:
 
-```bash
+```shell
 aws cloudformation delete-stack --stack-name aws-sfn-saga
 ```
