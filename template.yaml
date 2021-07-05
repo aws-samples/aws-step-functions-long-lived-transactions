@@ -3,14 +3,12 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  re:Invent 2018 Builder Session - Managing Long Lived Transactions with AWS Step Functions. 
-  AWS Step Functions is a fully managed Serverless workflow management service for managing 
-  long running processes and coordinating the components of distributed applications and 
-  microservices using visual workflows. But did you know it can also help you deal with the 
-  complexities of dealing with a long lived transaction across distributed components in your 
-  microservices architecture? In this Builder session, you will learn how AWS Step Function 
-  can help us implement the Saga design pattern.
-
+  Managing Long Lived Transactions with AWS Step Functions. AWS Step Functions is a fully managed 
+  Serverless workflow management service for managing long running processes and coordinating the 
+  components of distributed applications and microservices using visual workflows. This sample application 
+  demonstrates how you can deal with the complexities of distributed transactions and using AWS Step 
+  Functions implement the Saga design pattern.
+  
 ######   ##        #######  ########     ###    ##        ######
 ##    ##  ##       ##     ## ##     ##   ## ##   ##       ##    ##
 ##        ##       ##     ## ##     ##  ##   ##  ##       ##
