@@ -4,7 +4,6 @@ Comment: "Managing Long Lived Transactions with AWS Step Functions State Machine
 StartAt: ProcessOrder
 TimeoutSeconds: 15
 States:
-
   ProcessOrder:
     Type: Task
     Resource: 'arn:aws:states:::lambda:invoke'
@@ -77,7 +76,6 @@ States:
         ResultPath: $.error
     TimeoutSeconds: 10
 
-  # TODO: Replace SNS with EventBridge integration
   "sns:NotifySuccess":
     Type: Task
     Resource: "arn:aws:states:::sns:publish"
@@ -154,7 +152,6 @@ States:
       TopicArn: "${SagaTopic}"
     ResultPath: $.notification
     Next: OrderFailed
-  
 
   UpdateOrderStatus:
     Type: Task
