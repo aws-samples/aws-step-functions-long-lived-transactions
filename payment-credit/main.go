@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"aws-step-functions-long-lived-transactions/models"
+	"aws-step-functions-long-lived-transactions/models" // local
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"

@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aws-samples/aws-step-functions-long-lived-transactions/models"
+	"aws-step-functions-long-lived-transactions/models" // local
 	"github.com/stretchr/testify/assert"
 )
 
