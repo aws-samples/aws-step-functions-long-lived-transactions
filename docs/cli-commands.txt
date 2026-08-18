@@ -29,7 +29,7 @@ aws stepfunctions start-execution \
 -------------------------
 aws stepfunctions start-execution \
   --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
-  --input "{\"order_id\": \"222f741b-0292-4f93-a2f7-503f92486955 \", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"227dd3c9-58ab-4f0d-958a-5ead5858fba8\", \"items\": [{ \"item_id\": \"655\", \"qty\": 2.0, \"description\": \"Cart item 1\", \"unit_price\": 99.99 }]}" \
+  --input "{\"order_id\": \"222f741b-0292-4f93-a2f7-503f92486955\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"227dd3c9-58ab-4f0d-958a-5ead5858fba8\", \"items\": [{ \"item_id\": \"655\", \"qty\": 2.0, \"description\": \"Cart item 1\", \"unit_price\": 99.99 }]}" \
   --region [AWS_REGION]
 
 3 - ErrReserveInventory

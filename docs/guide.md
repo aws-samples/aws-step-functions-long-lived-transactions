@@ -35,7 +35,8 @@ This is a sample template for Managing Long Lived Transactions with AWS Step Fun
 │   ├── ...
 │   └── main.go
 ├── statemachine
-│   └── llt.asl.yaml        <-- # Step Functions ASL template
+│   └── llt.asl.yaml        <-- # Step Functions state machine definition (JSONata + workflow variables)
+├── go.work                 <-- # Go workspace tying the per-function modules and models together for local development
 ├── template.yaml           <-- # AWS SAM template for defining and deploying serverless application resources
 └── ...
 
@@ -142,6 +143,8 @@ OrderID Prefix | Will error with | Example | Expected execution
 3 | ErrReserveInventory | 3a7dc768-6f32-495d-a140-3d330c246f50 | ![3](images/paths-breakdown-3.png)
 33 | ErrReleaseInventory | 33a49007-a815-4079-9b9b-e30ae7eca11f | ![3](images/paths-breakdown-33.png)
 4-9 | No error | 47063fe3-56d9-4c51-b91f-71929834ce03 | ![4-9](images/paths-breakdown-7.png)
+
+> **Note:** The execution-path screenshots were captured in an earlier version of the Step Functions console; the console's look has changed, but the state paths are identical. When inspecting an execution, open the **Variables** panel (or a state's input) to watch the `$order` and `$error` workflow variables the saga uses to pass state to compensating transactions.
 
 ### Invoking your Step Function via CLI
 
