@@ -22,7 +22,9 @@ Globals:
   Function:
     Tracing: Active
     Handler: bootstrap
-    Runtime: provided.al2
+    Runtime: provided.al2023
+    Architectures:
+      - arm64
     MemorySize: 256
     Timeout: 15
     Tags:
@@ -43,6 +45,8 @@ Resources:
   # NewOrderFunction represents task to create a new order and set status to "new order"
   NewOrderFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
     Properties:
       CodeUri: ./order-new
       Policies:
@@ -54,7 +58,6 @@ Resources:
 
   NewOrderFunctionLogGroup:
       Type: AWS::Logs::LogGroup
-      DependsOn: [ NewOrderFunction ]
       Properties:
         LogGroupName: !Sub /aws/lambda/${NewOrderFunction}
         RetentionInDays: 7
@@ -62,6 +65,8 @@ Resources:
   # UpdateOrderFunction represents the compensating transaction to set order status to "pending"
   UpdateOrderFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
     Properties:
       CodeUri: ./order-update
       Policies:
@@ -73,7 +78,6 @@ Resources:
 
   UpdateOrderFunctionLogGroup:
       Type: AWS::Logs::LogGroup
-      DependsOn: [ UpdateOrderFunction ]
       Properties:
         LogGroupName: !Sub /aws/lambda/${UpdateOrderFunction}
         RetentionInDays: 7
@@ -81,16 +85,19 @@ Resources:
   # DebitPaymentFunction
   DebitPaymentFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
     Properties:
       CodeUri: ./payment-debit
-      Role: !Sub ${PaymentFunctionsRole.Arn}
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaymentsTable
       Environment:
         Variables:
           TABLE_NAME: !Ref PaymentsTable
 
   DebitPaymentFunctionLogGroup:
       Type: AWS::Logs::LogGroup
-      DependsOn: [ DebitPaymentFunction ]
       Properties:
         LogGroupName: !Sub /aws/lambda/${DebitPaymentFunction}
         RetentionInDays: 7
@@ -98,16 +105,19 @@ Resources:
   # CreditPaymentFunction represents the compensating transaction to refund customer order
   CreditPaymentFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
     Properties:
       CodeUri: ./payment-credit
-      Role: !Sub ${PaymentFunctionsRole.Arn}
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PaymentsTable
       Environment:
         Variables:
           TABLE_NAME: !Ref PaymentsTable
 
   CreditPaymentFunctionLogGroup:
       Type: AWS::Logs::LogGroup
-      DependsOn: [ CreditPaymentFunction ]
       Properties:
         LogGroupName: !Sub /aws/lambda/${CreditPaymentFunction}
         RetentionInDays: 7
@@ -115,16 +125,19 @@ Resources:
   # ReserveInventoryFunction represents task to reserve/remove order items from the inventory
   ReserveInventoryFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
     Properties:
       CodeUri: ./inventory-reserve
-      Role: !Sub ${InventoryFunctionsRole.Arn}
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref InventoryTable
       Environment:
         Variables:
           TABLE_NAME: !Ref InventoryTable
 
   ReserveInventoryFunctionLogGroup:
       Type: AWS::Logs::LogGroup
-      DependsOn: [ ReserveInventoryFunction ]
       Properties:
         LogGroupName: !Sub /aws/lambda/${ReserveInventoryFunction}
         RetentionInDays: 7
@@ -132,16 +145,19 @@ Resources:
   # ReleaseInventoryFunction represents the compensating transaction to reverses the changes to the inventory
   ReleaseInventoryFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
     Properties:
       CodeUri: ./inventory-release
-      Role: !Sub ${InventoryFunctionsRole.Arn}
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref InventoryTable
       Environment:
         Variables:
           TABLE_NAME: !Ref InventoryTable
 
   ReleaseInventoryFunctionLogGroup:
       Type: AWS::Logs::LogGroup
-      DependsOn: [ ReleaseInventoryFunction ]
       Properties:
         LogGroupName: !Sub /aws/lambda/${ReleaseInventoryFunction}
         RetentionInDays: 7
@@ -230,9 +246,6 @@ Resources:
       PrimaryKey:
         Name: order_id
         Type: String
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
       Tags:
         project: reInvent2018
         session: Managing Long Lived Transactions with AWS Step Functions
@@ -240,6 +253,7 @@ Resources:
   PaymentsTable:
     Type: AWS::DynamoDB::Table
     Properties:
+      BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: "transaction_id"
           AttributeType: "S"
@@ -250,9 +264,6 @@ Resources:
       KeySchema:
         - AttributeName: "transaction_id"
           KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
       GlobalSecondaryIndexes:
         - IndexName: "orderIDIndex"
           KeySchema:
@@ -262,9 +273,6 @@ Resources:
               KeyType: "RANGE"
           Projection:
             ProjectionType: "ALL"
-          ProvisionedThroughput:
-            ReadCapacityUnits: 1
-            WriteCapacityUnits: 1
       Tags:
         - Key: source
           Value: aws
@@ -274,6 +282,7 @@ Resources:
   InventoryTable:
     Type: AWS::DynamoDB::Table
     Properties:
+      BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: "transaction_id"
           AttributeType: "S"
@@ -284,9 +293,6 @@ Resources:
       KeySchema:
         - AttributeName: "transaction_id"
           KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: 5
-        WriteCapacityUnits: 5
       GlobalSecondaryIndexes:
         - IndexName: "orderIDIndex"
           KeySchema:
@@ -296,9 +302,6 @@ Resources:
               KeyType: "RANGE"
           Projection:
             ProjectionType: "ALL"
-          ProvisionedThroughput:
-            ReadCapacityUnits: 1
-            WriteCapacityUnits: 1
       Tags:
         - Key: source
           Value: aws
@@ -380,77 +383,8 @@ Resources:
   ##  ##     ## ##     ##
   #### ##     ## ##     ##
 
-  InventoryFunctionsRole:
-    Type: "AWS::IAM::Role"
-    Properties:
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
-        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: "AllowLambdaServiceToAssumeRole"
-            Effect: "Allow"
-            Action:
-              - "sts:AssumeRole"
-            Principal:
-              Service:
-                - "lambda.amazonaws.com"
-      Policies:
-        - PolicyName: "AllowCRUDOperationsOnDynamoDB"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                  - "dynamodb:GetItem"
-                  - "dynamodb:DeleteItem"
-                  - "dynamodb:DescribeTable"
-                  - "dynamodb:PutItem"
-                  - "dynamodb:Scan"
-                  - "dynamodb:Query"
-                  - "dynamodb:UpdateItem"
-                  - "dynamodb:BatchWriteItem"
-                  - "dynamodb:BatchGetItem"
-                Resource:
-                  - !Sub ${InventoryTable.Arn}
-                  - !Sub ${InventoryTable.Arn}/index/*
-
-  PaymentFunctionsRole:
-    Type: "AWS::IAM::Role"
-    Properties:
-      ManagedPolicyArns:
-        - "arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess"
-        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: "AllowLambdaServiceToAssumeRole"
-            Effect: "Allow"
-            Action:
-              - "sts:AssumeRole"
-            Principal:
-              Service:
-                - "lambda.amazonaws.com"
-      Policies:
-        - PolicyName: "AllowCRUDOperationsOnDynamoDB"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                  - "dynamodb:GetItem"
-                  - "dynamodb:DeleteItem"
-                  - "dynamodb:DescribeTable"
-                  - "dynamodb:PutItem"
-                  - "dynamodb:Scan"
-                  - "dynamodb:Query"
-                  - "dynamodb:UpdateItem"
-                  - "dynamodb:BatchWriteItem"
-                  - "dynamodb:BatchGetItem"
-                Resource:
-                  - !Sub ${PaymentsTable.Arn}
-                  - !Sub ${PaymentsTable.Arn}/index/*
+  # Function execution roles are created implicitly by SAM, one per function,
+  # scoped by per-function SAM policy templates (DynamoDBCrudPolicy above).
 
   #######  ##     ## ######## ########  ##     ## ########  ######
 ##     ## ##     ##    ##    ##     ## ##     ##    ##    ##    ##
@@ -489,10 +423,6 @@ Outputs:
     Description: "Process Payment Refund Function ARN"
     Value: !GetAtt CreditPaymentFunction.Arn
 
-  PaymentFunctionsIamRole:
-    Description: "Implicit IAM Role created for payment functions"
-    Value: !GetAtt PaymentFunctionsRole.Arn
-
   # ReserveInventoryFunction
   ReserveInventoryFunctionArn:
     Description: "Reserve Inventory Function ARN"
@@ -502,10 +432,6 @@ Outputs:
   ReleaseInventoryFunctionFunctionArn:
     Description: "Release Inventory Function ARN"
     Value: !GetAtt ReleaseInventoryFunction.Arn
-
-  InventoryFunctionsIamRole:
-    Description: "Implicit IAM Role created for inventory functions"
-    Value: !GetAtt InventoryFunctionsRole.Arn
 
   # Step Function ARN
   SagaStateMachineArn:

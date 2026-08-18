@@ -1,0 +1,11 @@
+go 1.26
+
+use (
+	./inventory-release
+	./inventory-reserve
+	./models
+	./order-new
+	./order-update
+	./payment-credit
+	./payment-debit
+)
