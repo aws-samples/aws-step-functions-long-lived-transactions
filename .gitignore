@@ -12,6 +12,9 @@ packaged.yaml
 # Created by https://www.gitignore.io/api/go,visualstudiocode
 
 ### Go ###
+# Go workspace sum file (workspace is for local dev; module builds stand alone)
+go.work.sum
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

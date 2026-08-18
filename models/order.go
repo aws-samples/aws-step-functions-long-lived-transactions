@@ -8,21 +8,21 @@ import (
 
 // Order represents a customer order
 type Order struct {
-	OrderID     string    `json:"order_id,omitempty"`
-	OrderDate   time.Time `json:"order_date,omitempty"`
-	CustomerID  string    `json:"customer_id,omitempty"`
-	OrderStatus string    `json:"order_status,omitempty"`
-	Items       []Item    `json:"items,omitempty"`
-	Payment     Payment   `json:"payment,omitempty"`
-	Inventory   Inventory `json:"inventory,omitempty"`
+	OrderID     string    `json:"order_id,omitempty" dynamodbav:"order_id,omitempty"`
+	OrderDate   time.Time `json:"order_date,omitempty" dynamodbav:"order_date,omitempty"`
+	CustomerID  string    `json:"customer_id,omitempty" dynamodbav:"customer_id,omitempty"`
+	OrderStatus string    `json:"order_status,omitempty" dynamodbav:"order_status,omitempty"`
+	Items       []Item    `json:"items,omitempty" dynamodbav:"items,omitempty"`
+	Payment     Payment   `json:"payment,omitempty" dynamodbav:"payment,omitempty"`
+	Inventory   Inventory `json:"inventory,omitempty" dynamodbav:"inventory,omitempty"`
 }
 
 // Item represents an item in the cart
 type Item struct {
-	ItemID      string  `json:"item_id,omitempty"`
-	Qty         float64 `json:"qty,omitempty"`
-	Description string  `json:"description,omitempty"`
-	UnitPrice   float64 `json:"unit_price,omitempty"`
+	ItemID      string  `json:"item_id,omitempty" dynamodbav:"item_id,omitempty"`
+	Qty         float64 `json:"qty,omitempty" dynamodbav:"qty,omitempty"`
+	Description string  `json:"description,omitempty" dynamodbav:"description,omitempty"`
+	UnitPrice   float64 `json:"unit_price,omitempty" dynamodbav:"unit_price,omitempty"`
 }
 
 // Total returns the total ammount of the order

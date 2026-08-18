@@ -45,56 +45,78 @@ This is a sample template for Managing Long Lived Transactions with AWS Step Fun
 
 A full description of the how to describe your state machine can be found on the [Amazon States Language specification](https://states-language.net/spec.html).
 
-Please review the "Templates" section in the [AWS Console](https://console.aws.amazon.com/states/home) for examples of how you can implement various states.
+This sample's state machine ([statemachine/llt.asl.yaml](../statemachine/llt.asl.yaml)) uses the **JSONata** query language (`"QueryLanguage": "JSONata"`) together with [workflow variables](https://docs.aws.amazon.com/step-functions/latest/dg/workflow-variables.html): after each successful transaction the order payload is assigned to an `$order` variable, and every compensating transaction is invoked with `{% $order %}` — so compensations always receive a clean order payload, and error details travel separately in an `$error` variable.
 
 ### Useful snippets
 
 #### Task state
 
-The Task State (identified by "Type":"Task") causes the interpreter to execute the work identified by the state's “Resource” field.
+The Task State (identified by "Type":"Task") causes the interpreter to execute the work identified by the state's "Resource" field. With JSONata, inputs are built with `Arguments` and the state's result is shaped with `Output`; `Assign` stores values in workflow variables.
 
 ```json
 "ProcessOrder": {
   "Comment": "First transaction to save the order and set the order status to new",
   "Type": "Task",
-  "Resource": "arn:aws:lambda:[REGION]:[ACCOUNT NUMBER]:function:aws-step-functions-long-lived-tra-NewOrderFunction-121DONKVIBL5T",
+  "Resource": "arn:aws:states:::lambda:invoke",
+  "Arguments": {
+    "FunctionName": "[NEW ORDER FUNCTION ARN]",
+    "Payload": "{% $states.input %}"
+  },
+  "Output": "{% $states.result.Payload %}",
+  "Assign": {
+    "order": "{% $states.result.Payload %}"
+  },
   "TimeoutSeconds": 10,
   "Next": "ProcessPayment"
 }
 ```
 
 #### Catch
-Any state can encounter runtime errors. Errors can arise because of state machine definition issues (e.g. the “ResultPath” problem discussed immediately above), task failures (e.g. an exception thrown by a Lambda function) or because of transient issues, such as network partition events.
+Any state can encounter runtime errors. Errors can arise because of state machine definition issues, task failures (e.g. an exception thrown by a Lambda function) or because of transient issues, such as network partition events. In JSONata mode, a Catch clause can `Assign` the error output (`$states.errorOutput`) to a variable instead of splicing it into the payload:
 
 ```json
 "Catch": [
   {
     "ErrorEquals": ["ErrProcessOrder"],
-    "ResultPath": "$.error",
+    "Assign": {
+      "error": "{% $states.errorOutput %}"
+    },
     "Next": "UpdateOrderStatus"
   }
 ]
 ```
 
 #### Retry
-Task States and Parallel States MAY have a field named “Retry”, whose value MUST be an array of objects, called Retriers.
+Task States and Parallel States MAY have a field named "Retry", whose value MUST be an array of objects, called Retriers.
 
-When a	state reports an error, the interpreter scans through the Retriers and, when the Error Name appears in the value of of a Retrier’s “ErrorEquals” field, implements the retry policy described in that Retrier.
+When a state reports an error, the interpreter scans through the Retriers and, when the Error Name appears in the value of a Retrier's "ErrorEquals" field, implements the retry policy described in that Retrier. Use `JitterStrategy: FULL` to randomize waits (preventing thundering herds) and `MaxDelaySeconds` to cap the backoff — and make sure the worst-case retry schedule fits inside the state machine's `TimeoutSeconds`.
 
 ```json
 "Retry": [{
-  "ErrorEquals": ["States.ALL"],
-  "IntervalSeconds": 1,
-  "MaxAttempts": 2,
-  "BackoffRate": 2.0
+  "ErrorEquals": [
+    "Lambda.ServiceException",
+    "Lambda.AWSLambdaException",
+    "Lambda.SdkClientException"
+  ],
+  "IntervalSeconds": 2,
+  "MaxAttempts": 3,
+  "BackoffRate": 2.0,
+  "MaxDelaySeconds": 8,
+  "JitterStrategy": "FULL"
   }],
   "Catch": [{
     "ErrorEquals": ["ErrReleaseInventory"],
-    "ResultPath": "$.error",
-    "Next": "ReleaseInventoryFailed"
+    "Assign": { "error": "{% $states.errorOutput %}" },
+    "Next": "sns:NotifyReleaseInventoryFail"
   }
 ]
 ```
+
+#### Retries and idempotency
+
+Step Functions retries mean a Task can invoke its Lambda function more than once for the same order — retries deliver *at-least-once* execution. Any state the task writes must therefore be idempotent, or each retry creates a duplicate record.
+
+This sample derives each payment and inventory `transaction_id` deterministically (a UUIDv5 computed from the `order_id` and the transaction type — see `models.TransactionID`) instead of generating a random ID per invocation. Because DynamoDB's `PutItem` overwrites items with the same key, a retried debit or reservation overwrites its own prior record instead of double-charging the customer or double-reserving stock.
 
 ## Custom Errors
 

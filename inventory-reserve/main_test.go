@@ -3,14 +3,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"reflect"
 	"testing"
 
 	"aws-step-functions-long-lived-transactions/models"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,14 +19,22 @@ import (
 var scenarioErrInventoryUpdate = "../testdata/scenario-5.json"
 var scenarioSuccessfulOrder = "../testdata/scenario-7.json"
 
+// fakeDB satisfies dynamoDBAPI so tests run offline.
+type fakeDB struct{}
+
+func (f *fakeDB) PutItem(ctx context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+	return &dynamodb.PutItemOutput{}, nil
+}
+
 func TestHandler(t *testing.T) {
 	assert := assert.New(t)
+	db = &fakeDB{}
 
-	t.Run("ProcessPayment", func(t *testing.T) {
+	t.Run("ReserveInventory", func(t *testing.T) {
 
 		o := parseOrder(scenarioSuccessfulOrder)
 
-		order, err := handler(nil, o)
+		order, err := handler(context.Background(), o)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -35,21 +44,20 @@ func TestHandler(t *testing.T) {
 	})
 }
 
-func TestErrorIsOfTypeErrInventoryUpdate(t *testing.T) {
+func TestErrorIsOfTypeErrReserveInventory(t *testing.T) {
 	assert := assert.New(t)
-	t.Run("ProcessPaymentErr", func(t *testing.T) {
+	db = &fakeDB{}
+
+	t.Run("ReserveInventoryErr", func(t *testing.T) {
 
 		input := parseOrder(scenarioErrInventoryUpdate)
 
-		order, err := handler(nil, input)
-		if err != nil {
-			fmt.Print(err)
-		}
+		order, err := handler(context.Background(), input)
 
 		if assert.Error(err) {
 			errorType := reflect.TypeOf(err)
 			assert.Equal(errorType.String(), "*models.ErrReserveInventory", "Type does not match *models.ErrReserveInventory")
-			assert.Empty(order.OrderID)
+			assert.NotEmpty(order.OrderID)
 		}
 	})
 }
@@ -69,5 +77,5 @@ func parseOrder(filename string) models.Order {
 		println("parsing input file", err.Error())
 	}
 
-	return o
+	return order
 }

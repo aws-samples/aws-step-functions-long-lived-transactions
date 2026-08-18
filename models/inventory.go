@@ -4,29 +4,28 @@ package models
 
 import (
 	"time"
-
-	"github.com/gofrs/uuid"
 )
 
 // Inventory represents the transaction on inventory
 type Inventory struct {
-	TransactionID   string   `json:"transaction_id,omitempty"`
-	TransactionDate string   `json:"transaction_date,omitempty"`
-	OrderID         string   `json:"order_id,omitempty"`
-	OrderItems      []string `json:"items,omitempty"`
-	TransactionType string   `json:"transaction_type,omitempty"`
+	TransactionID   string   `json:"transaction_id,omitempty" dynamodbav:"transaction_id,omitempty"`
+	TransactionDate string   `json:"transaction_date,omitempty" dynamodbav:"transaction_date,omitempty"`
+	OrderID         string   `json:"order_id,omitempty" dynamodbav:"order_id,omitempty"`
+	OrderItems      []string `json:"items,omitempty" dynamodbav:"items,omitempty"`
+	TransactionType string   `json:"transaction_type,omitempty" dynamodbav:"transaction_type,omitempty"`
 }
 
-// Reserve method removes items from the inventory
+// Reserve method removes items from the inventory.
+// The transaction ID is deterministic (order + type) so retries are idempotent.
 func (i *Inventory) Reserve() {
-	i.TransactionID = uuid.Must(uuid.NewV4()).String()
+	i.TransactionID = TransactionID(i.OrderID, "Reserve")
 	i.TransactionDate = time.Now().Format(time.RFC3339)
 	i.TransactionType = "Reserve"
 }
 
 // Release method makes items from the inventory available
 func (i *Inventory) Release() {
-	i.TransactionID = uuid.Must(uuid.NewV4()).String()
+	i.TransactionID = TransactionID(i.OrderID, "Release")
 	i.TransactionDate = time.Now().Format(time.RFC3339)
 	i.TransactionType = "Release"
 }

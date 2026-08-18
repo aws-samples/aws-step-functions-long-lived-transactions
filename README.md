@@ -30,12 +30,23 @@ You are creating an e-commerce application and are processing an order. This req
 
 ![Saga with Step Functions](docs/images/stepdiagram_new.png)
 
+### What's in the sample
+
+* **Go** Lambda functions (one module per function, shared `models` module, `go.work` workspace) built with SAM's native Go builder (`BuildMethod: go1.x`)
+* **AWS SDK for Go v2** with X-Ray tracing via the SDK v2 instrumentor
+* **`provided.al2023` runtime on arm64 (Graviton)**
+* State machine written in **JSONata** with **workflow variables**: the order payload is assigned to a `$order` variable after each successful step, so compensating transactions receive a clean order payload rather than one with error data spliced in
+* **Retry policies with jitter** (`JitterStrategy: FULL`, `MaxDelaySeconds`) on every task, sized to fit the state machine's execution timeout
+* **Idempotent transaction writes**: payment and inventory transaction IDs are deterministic (UUIDv5 derived from the order), so Step Functions task retries overwrite rather than duplicate records
+* Per-function IAM roles using SAM policy templates, on-demand DynamoDB tables
+
 ### Learning objectives
 
 The goal is to demonstrate: 
 
 * How to create a state machine that implements the Saga pattern
 * Understand how to use error handling and retry functionality using AWS Step Functions
+* How JSONata and workflow variables simplify passing state between saga steps and compensations
 * Configure Task states to execute pre-provisioned AWS Lambda functions
 
 ### Get started
@@ -45,9 +56,13 @@ The goal is to demonstrate:
 
 ## Additional Step Functions resources and reference architectures
 
+> **Note:** For workflows that are primarily application logic rather than multi-service orchestration, [AWS Lambda durable functions](https://docs.aws.amazon.com/lambda/latest/dg/durable-functions.html) are a modern alternative for implementing distributed transactions as plain code with automatic checkpointing. This sample intentionally uses Step Functions to demonstrate the saga pattern with a visual, service-orchestrated workflow.
+
 * [GitHub: AWS Step Function Samples](https://github.com/aws-samples/aws-stepfunctions-examples/)
 * [GitHub: AWS Step Functions Plagiarism Demo .NET Core](https://github.com/aws-samples/aws-step-functions-plagiarism-demo-dotnetcore)
 * [Documentation: AWS Step Functions Developer Guide](https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html)
+* [Documentation: Transforming data with JSONata in Step Functions](https://docs.aws.amazon.com/step-functions/latest/dg/transforming-data.html)
+* [Documentation: Step Functions workflow variables](https://docs.aws.amazon.com/step-functions/latest/dg/workflow-variables.html)
 * [Documentation: AWS Step Function Tutorials](https://docs.aws.amazon.com/step-functions/latest/dg/tutorials.html)
 * [Specification: Amazon States Language](https://states-language.net/spec.html)
 * [Tools: statelint](https://github.com/awslabs/statelint)
