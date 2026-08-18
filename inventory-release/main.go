@@ -11,29 +11,36 @@ import (
 	"aws-step-functions-long-lived-transactions/models" // local
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/aws/aws-xray-sdk-go/xray"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-xray-sdk-go/instrumentation/awsv2"
 )
 
-var dynamoDB *dynamodb.DynamoDB
+// dynamoDBAPI is the narrow slice of the DynamoDB client this function uses.
+type dynamoDBAPI interface {
+	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
+}
+
+var db dynamoDBAPI
 
 func init() {
 
-	// Create DynamoDB client
-	var awscfg = &aws.Config{
-		Region: aws.String(os.Getenv("AWS_REGION")),
+	// Load AWS configuration and create the DynamoDB client
+	cfg, err := config.LoadDefaultConfig(context.Background())
+	if err != nil {
+		log.Fatalf("unable to load AWS config: %v", err)
 	}
-	var sess = session.Must(session.NewSession(awscfg))
-	dynamoDB = dynamodb.New(sess)
 
 	// AWS X-Ray for AWS SDK trace
-	xray.AWS(dynamoDB.Client)
+	awsv2.AWSV2Instrumentor(&cfg.APIOptions)
 
-	log.SetPrefix("TRACE: ")
+	db = dynamodb.NewFromConfig(cfg)
+
+	log.SetPrefix("TRACE: ")
 	log.SetFlags(log.Ldate | log.Ltime)
 
 }
@@ -66,38 +73,39 @@ func handler(ctx context.Context, ord models.Order) (models.Order, error) {
 		return ord, models.NewErrReleaseInventory("Unable to release inventory for order " + ord.OrderID)
 	}
 
-	log.Printf("[%s] - reservation processed", ord.OrderID)
+	log.Printf("[%s] - inventory release processed", ord.OrderID)
 
 	return ord, nil
 }
 
+// getTransaction returns the reserve inventory transaction for the specified order
 func getTransaction(ctx context.Context, orderID string) (models.Inventory, error) {
 
 	inventory := models.Inventory{}
 
 	input := &dynamodb.QueryInput{
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":v1": {
-				S: aws.String(orderID),
-			},
-			":v2": {
-				S: aws.String("Reserve"),
-			},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":v1": &types.AttributeValueMemberS{Value: orderID},
+			":v2": &types.AttributeValueMemberS{Value: "Reserve"},
 		},
 		KeyConditionExpression: aws.String("order_id = :v1 AND transaction_type = :v2"),
 		TableName:              aws.String(os.Getenv("TABLE_NAME")),
 		IndexName:              aws.String("orderIDIndex"),
 	}
 
-	// Get payment transaction from database
-	result, err := dynamoDB.QueryWithContext(ctx, input)
+	// Get inventory transaction from database
+	result, err := db.Query(ctx, input)
 	if err != nil {
 		return inventory, err
 	}
 
-	err = dynamodbattribute.UnmarshalMap(result.Items[0], &inventory)
+	if len(result.Items) == 0 {
+		return inventory, fmt.Errorf("no reserve transaction found for order %s", orderID)
+	}
+
+	err = attributevalue.UnmarshalMap(result.Items[0], &inventory)
 	if err != nil {
-		return inventory, fmt.Errorf("failed to DynamoDB unmarshal Record, %v", err.(awserr.Error))
+		return inventory, fmt.Errorf("failed to DynamoDB unmarshal Inventory, %w", err)
 	}
 
 	return inventory, nil
@@ -105,18 +113,18 @@ func getTransaction(ctx context.Context, orderID string) (models.Inventory, erro
 
 func saveTransaction(ctx context.Context, inventory models.Inventory) error {
 
-	marshalledInventory, err := dynamodbattribute.MarshalMap(inventory)
+	marshalledInventory, err := attributevalue.MarshalMap(inventory)
 	if err != nil {
-		return fmt.Errorf("failed to DynamoDB marshal Inventory, %v", err)
+		return fmt.Errorf("failed to DynamoDB marshal Inventory, %w", err)
 	}
 
-	_, err = dynamoDB.PutItemWithContext(ctx, &dynamodb.PutItemInput{
+	_, err = db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(os.Getenv("TABLE_NAME")),
 		Item:      marshalledInventory,
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to put record to DynamoDB, %v", err)
+		return fmt.Errorf("failed to put record to DynamoDB, %w", err)
 	}
 	return nil
 }

@@ -1,79 +1,34 @@
 # Setup Information
 
-## Using AWS CloudFormation (preferred)
+You deploy this sample from source using the AWS SAM CLI.
 
-The easiest way to get started is to launch an AWS CloudFormation template that will deploy the resources for this workshop.
+## Requirements
 
-Region| Launch
-------|-----
-US East (N. Virginia) | [![Launch in us-east-1](http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/images/cloudformation-launch-stack-button.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=aws-sfn-saga&templateURL=https://s3.amazonaws.com/aws-step-functions-long-lived-transactions-us-east-1/template.yaml)
-US West (Oregon) | [![Launch in us-west-2](http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/images/cloudformation-launch-stack-button.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=aws-sfn-saga&templateURL=https://s3-us-west-2.amazonaws.com/aws-step-functions-long-lived-transactions-us-west-2/template.yaml)
-Asia Pacific (Sydney) | [![Launch in ap-southeast-2](http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/images/cloudformation-launch-stack-button.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-southeast-2#/stacks/create/review?stackName=aws-sfn-saga&templateURL=https://s3-ap-southeast-2.amazonaws.com/aws-step-functions-long-lived-transactions-ap-southeast-2/template.yaml)
+* [AWS CLI](https://aws.amazon.com/cli/) configured with permissions to create IAM roles, Lambda functions, DynamoDB tables, SNS/SQS resources, and Step Functions state machines
+* [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html)
+* [Go](https://go.dev/doc/install) 1.26 or later
+* Make (optional — convenience targets in the root `Makefile`)
 
-### CloudFormation Setup Instructions
+> Docker is **not** required: the functions are built with SAM's native Go builder, which cross-compiles for the `provided.al2023` arm64 runtime on any host.
 
-1. Click the **Launch Stack** link above for the region of your choice.
+## Clone the repository
 
-1. Name the stack (or leave the default `aws-sfn-saga`)
-
-1. In the Capabilities section acknowledge that CloudFormation will create IAM resources and click **Create**.
-    ![Acknowledge IAM Screenshot](images/capabilities.png)
-
-1. Select `Create Change Set`
-
-1. Once the Change Set has been successfully created, select `Execute` to create the stack.
-
-## Deploy from Source
-Alternatively, you can deploy the source from you local development environment. Please note, this requires the following environment setup.
-
-### Requirements
-
-* [aws-cli](https://aws.amazon.com/cli/) already configured with Administrator permissions.
-* [sam-cli](https://docs.aws.amazon.com/serverless-application-model/index.html) AWS SAM CLI tool for local development and testing of Serverless applications
-* [Docker installed](https://www.docker.com/community-edition)
-* [Golang](https://golang.org)
-* Make (see instructions below)
-
-### Installing SAM CLI
-
-AWS SAM provides you with a command line tool, the AWS SAM CLI, that makes it easy for you to create and manage serverless applications. You need to install and configure a few things in order to use the AWS SAM CLI.
-
-To install the AWS SAM CLI, see the following instructions for your development host:
-
-* [Installing the AWS SAM CLI on Linux](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-linux.html)
-* [Installing the AWS SAM CLI on Windows](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-windows.html)
-* [Installing the AWS SAM CLI on macOS](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-mac.html)
-
-### Installing Golang
-
-Please ensure Go 1.x (where 'x' is the latest version) is installed as per the instructions on the official golang website: https://golang.org/doc/install
-
-A quick-start way would be to use Homebrew, chocolatey or your linux package manager.
-
-#### Configuring GoPATH
-
-In order to build the source locally you need to set up our Go development environment.
-
-Follow the instructions as outlined here https://github.com/golang/go/wiki/SettingGOPATH
-
-### Clone the repository
-
-Once you have you GOPATH configured clone the builder session repository into the following directory under your GOPATH
+Go modules are used throughout, so you can clone the repository anywhere (no `GOPATH` setup needed):
 
 ```shell
-mkdir $GOPATH/src/github.com/aws-samples
-cd $GOPATH/src/github.com/aws-samples
 git clone https://github.com/aws-samples/aws-step-functions-long-lived-transactions.git
+cd aws-step-functions-long-lived-transactions
 ```
 
-once you have done that download and install the dependencies for the project. From the project root run:
+The repository contains one Go module per Lambda function plus a shared `models` module, tied together for local development with a `go.work` workspace file. To run all unit tests:
 
 ```shell
-go get -u ./...
+make test
 ```
 
-### Deploy the sample application
-To build and deploy your application for the first time, run the following in your shell:
+## Deploy the sample application
+
+To build and deploy the application for the first time, run:
 
 ```shell
 sam build
@@ -98,7 +53,7 @@ Configuring SAM deploy
         SAM configuration environment [default]: 
 ```
 
-The first command will build the source of your application. The second command will package and deploy your application to AWS, with a series of prompts:
+The first command builds all six functions. The second packages and deploys the application to AWS with a series of prompts:
 
 * **Stack Name**: The name of the stack to deploy to CloudFormation. This should be unique to your account and region, and a good starting point would be something matching your project name.
 
@@ -106,11 +61,11 @@ The first command will build the source of your application. The second command 
 
 * **Confirm changes before deploy**: If set to yes, any change sets will be shown to you before execution for manual review. If set to no, the AWS SAM CLI will automatically deploy application changes.
 
-* **Allow SAM CLI IAM role creation**: Many AWS SAM templates, including this example, create AWS IAM roles required for the AWS Lambda function(s) included to access AWS services. By default, these are scoped down to minimum required permissions. To deploy an AWS CloudFormation stack which creates or modifies IAM roles, the `CAPABILITY_IAM` value for `capabilities` must be provided. If permission isn't provided through this prompt, to deploy this example you must explicitly pass `--capabilities CAPABILITY_IAM` to the `sam deploy` command.
+* **Allow SAM CLI IAM role creation**: This template creates scoped-down AWS IAM roles for the Lambda functions and state machine. To deploy a stack that creates or modifies IAM roles, the `CAPABILITY_IAM` value for `capabilities` must be provided. If permission isn't provided through this prompt, you must explicitly pass `--capabilities CAPABILITY_IAM` to the `sam deploy` command.
 
-* **Save arguments to samconfig.toml**: If set to yes, your choices will be saved to a configuration file inside the project, so that in the future you can just re-run `sam deploy` without parameters to deploy changes to your application.
+* **Save arguments to samconfig.toml**: If set to yes, your choices are saved to a configuration file inside the project, so that in the future you can just re-run `sam deploy` without parameters to deploy changes to your application.
 
-The following command describes the outputs defined within the cloudformation stack:
+The following command describes the outputs defined within the CloudFormation stack:
 
 ```shell
 aws cloudformation describe-stacks \
@@ -119,7 +74,7 @@ aws cloudformation describe-stacks \
 
 ## Completion
 
-Once you have successfully deployed the functions, go ahead and start testing the saga.
+Once you have successfully deployed the application, go ahead and start testing the saga.
 
 See the [Session Guide](guide.md) for more information.
 

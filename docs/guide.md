@@ -35,7 +35,8 @@ This is a sample template for Managing Long Lived Transactions with AWS Step Fun
 │   ├── ...
 │   └── main.go
 ├── statemachine
-│   └── llt.asl.yaml        <-- # Step Functions ASL template
+│   └── llt.asl.yaml        <-- # Step Functions state machine definition (JSONata + workflow variables)
+├── go.work                 <-- # Go workspace tying the per-function modules and models together for local development
 ├── template.yaml           <-- # AWS SAM template for defining and deploying serverless application resources
 └── ...
 
@@ -45,56 +46,78 @@ This is a sample template for Managing Long Lived Transactions with AWS Step Fun
 
 A full description of the how to describe your state machine can be found on the [Amazon States Language specification](https://states-language.net/spec.html).
 
-Please review the "Templates" section in the [AWS Console](https://console.aws.amazon.com/states/home) for examples of how you can implement various states.
+This sample's state machine ([statemachine/llt.asl.yaml](../statemachine/llt.asl.yaml)) uses the **JSONata** query language (`"QueryLanguage": "JSONata"`) together with [workflow variables](https://docs.aws.amazon.com/step-functions/latest/dg/workflow-variables.html): after each successful transaction the order payload is assigned to an `$order` variable, and every compensating transaction is invoked with `{% $order %}` — so compensations always receive a clean order payload, and error details travel separately in an `$error` variable.
 
 ### Useful snippets
 
 #### Task state
 
-The Task State (identified by "Type":"Task") causes the interpreter to execute the work identified by the state's “Resource” field.
+The Task State (identified by "Type":"Task") causes the interpreter to execute the work identified by the state's "Resource" field. With JSONata, inputs are built with `Arguments` and the state's result is shaped with `Output`; `Assign` stores values in workflow variables.
 
 ```json
 "ProcessOrder": {
   "Comment": "First transaction to save the order and set the order status to new",
   "Type": "Task",
-  "Resource": "arn:aws:lambda:[REGION]:[ACCOUNT NUMBER]:function:aws-step-functions-long-lived-tra-NewOrderFunction-121DONKVIBL5T",
+  "Resource": "arn:aws:states:::lambda:invoke",
+  "Arguments": {
+    "FunctionName": "[NEW ORDER FUNCTION ARN]",
+    "Payload": "{% $states.input %}"
+  },
+  "Output": "{% $states.result.Payload %}",
+  "Assign": {
+    "order": "{% $states.result.Payload %}"
+  },
   "TimeoutSeconds": 10,
   "Next": "ProcessPayment"
 }
 ```
 
 #### Catch
-Any state can encounter runtime errors. Errors can arise because of state machine definition issues (e.g. the “ResultPath” problem discussed immediately above), task failures (e.g. an exception thrown by a Lambda function) or because of transient issues, such as network partition events.
+Any state can encounter runtime errors. Errors can arise because of state machine definition issues, task failures (e.g. an exception thrown by a Lambda function) or because of transient issues, such as network partition events. In JSONata mode, a Catch clause can `Assign` the error output (`$states.errorOutput`) to a variable instead of splicing it into the payload:
 
 ```json
 "Catch": [
   {
     "ErrorEquals": ["ErrProcessOrder"],
-    "ResultPath": "$.error",
+    "Assign": {
+      "error": "{% $states.errorOutput %}"
+    },
     "Next": "UpdateOrderStatus"
   }
 ]
 ```
 
 #### Retry
-Task States and Parallel States MAY have a field named “Retry”, whose value MUST be an array of objects, called Retriers.
+Task States and Parallel States MAY have a field named "Retry", whose value MUST be an array of objects, called Retriers.
 
-When a	state reports an error, the interpreter scans through the Retriers and, when the Error Name appears in the value of of a Retrier’s “ErrorEquals” field, implements the retry policy described in that Retrier.
+When a state reports an error, the interpreter scans through the Retriers and, when the Error Name appears in the value of a Retrier's "ErrorEquals" field, implements the retry policy described in that Retrier. Use `JitterStrategy: FULL` to randomize waits (preventing thundering herds) and `MaxDelaySeconds` to cap the backoff — and make sure the worst-case retry schedule fits inside the state machine's `TimeoutSeconds`.
 
 ```json
 "Retry": [{
-  "ErrorEquals": ["States.ALL"],
-  "IntervalSeconds": 1,
-  "MaxAttempts": 2,
-  "BackoffRate": 2.0
+  "ErrorEquals": [
+    "Lambda.ServiceException",
+    "Lambda.AWSLambdaException",
+    "Lambda.SdkClientException"
+  ],
+  "IntervalSeconds": 2,
+  "MaxAttempts": 3,
+  "BackoffRate": 2.0,
+  "MaxDelaySeconds": 8,
+  "JitterStrategy": "FULL"
   }],
   "Catch": [{
     "ErrorEquals": ["ErrReleaseInventory"],
-    "ResultPath": "$.error",
-    "Next": "ReleaseInventoryFailed"
+    "Assign": { "error": "{% $states.errorOutput %}" },
+    "Next": "sns:NotifyReleaseInventoryFail"
   }
 ]
 ```
+
+#### Retries and idempotency
+
+Step Functions retries mean a Task can invoke its Lambda function more than once for the same order — retries deliver *at-least-once* execution. Any state the task writes must therefore be idempotent, or each retry creates a duplicate record.
+
+This sample derives each payment and inventory `transaction_id` deterministically (a UUIDv5 computed from the `order_id` and the transaction type — see `models.TransactionID`) instead of generating a random ID per invocation. Because DynamoDB's `PutItem` overwrites items with the same key, a retried debit or reservation overwrites its own prior record instead of double-charging the customer or double-reserving stock.
 
 ## Custom Errors
 
@@ -111,15 +134,49 @@ The following is a list of all the custom errors thrown by the application and c
 
 The AWS Step Functions implementation has been configured for you to be easily test the various scenarios of the saga implementation. Modifying your `order_id` with a specified prefix will trigger an error in the each Task.
 
-OrderID Prefix | Will error with | Example | Expected execution
+The full state machine, including every compensation edge:
+
+```mermaid
+flowchart TD
+    ProcessOrder -->|success| ProcessPayment
+    ProcessOrder -->|ErrProcessOrder| UpdateOrderStatus
+    ProcessPayment -->|success| ReserveInventory
+    ProcessPayment -->|ErrProcessPayment| ProcessRefund
+    ReserveInventory -->|success| NotifySuccess["sns:NotifySuccess"]
+    ReserveInventory -->|ErrReserveInventory| ReleaseInventory
+    NotifySuccess --> OrderSucceeded([OrderSucceeded])
+    ReleaseInventory -->|success| ProcessRefund
+    ReleaseInventory -->|ErrReleaseInventory| NotifyReleaseFail["sns:NotifyReleaseInventoryFail"]
+    ProcessRefund -->|success| UpdateOrderStatus
+    ProcessRefund -->|ErrProcessRefund| NotifyRefundFail["sns:NotifyProcessRefundFail"]
+    UpdateOrderStatus -->|success| OrderFailed([OrderFailed])
+    UpdateOrderStatus -->|ErrUpdateOrderStatus| NotifyUpdateFail["sns:NotifyUpdateOrderFail"]
+    NotifyReleaseFail --> OrderFailed
+    NotifyRefundFail --> OrderFailed
+
+    classDef forward fill:#2d6a4f,color:#fff
+    classDef compensation fill:#bc4b00,color:#fff
+    classDef notify fill:#1d4e89,color:#fff
+    classDef terminal fill:#495057,color:#fff
+    class ProcessOrder,ProcessPayment,ReserveInventory forward
+    class UpdateOrderStatus,ProcessRefund,ReleaseInventory compensation
+    class NotifySuccess,NotifyReleaseFail,NotifyRefundFail,NotifyUpdateFail notify
+    class OrderSucceeded,OrderFailed terminal
+```
+
+Each scenario drives the execution down a specific path:
+
+OrderID Prefix | Will error with | Example | Expected state path
 ------------ | ------------- | --- | ---
-1 | ErrProcessOrder | 1ae4501d-ed92-4b27-bf0e-fd978ed45127 | ![1](images/paths-breakdown-1.png) 
-11 | ErrUpdateOrderStatus | 11328abd-368d-43fd-bd4f-db15b5b63951 | ![11](images/paths-breakdown-11.png)
-2 | ErrProcessPayment |  20b0b599-441b-45c3-910e-ad63fe992c43 | ![2](images/paths-breakdown-2.png)
-22 | ErrProcessRefund | 222f741b-0292-4f93-a2f7-503f92486955 | ![22](images/paths-breakdown-22.png)
-3 | ErrReserveInventory | 3a7dc768-6f32-495d-a140-3d330c246f50 | ![3](images/paths-breakdown-3.png)
-33 | ErrReleaseInventory | 33a49007-a815-4079-9b9b-e30ae7eca11f | ![3](images/paths-breakdown-33.png)
-4-9 | No error | 47063fe3-56d9-4c51-b91f-71929834ce03 | ![4-9](images/paths-breakdown-7.png)
+1 | ErrProcessOrder | 1ae4501d-ed92-4b27-bf0e-fd978ed45127 | ProcessOrder → UpdateOrderStatus → OrderFailed
+11 | ErrUpdateOrderStatus | 11328abd-368d-43fd-bd4f-db15b5b63951 | ProcessOrder → UpdateOrderStatus → sns:NotifyUpdateOrderFail → OrderFailed
+2 | ErrProcessPayment | 20b0b599-441b-45c3-910e-ad63fe992c43 | ProcessOrder → ProcessPayment → ProcessRefund → UpdateOrderStatus → OrderFailed
+22 | ErrProcessRefund | 222f741b-0292-4f93-a2f7-503f92486955 | ProcessOrder → ProcessPayment → ProcessRefund → sns:NotifyProcessRefundFail → OrderFailed
+3 | ErrReserveInventory | 3a7dc768-6f32-495d-a140-3d330c246f50 | ProcessOrder → ProcessPayment → ReserveInventory → ReleaseInventory → ProcessRefund → UpdateOrderStatus → OrderFailed
+33 | ErrReleaseInventory | 33a49007-a815-4079-9b9b-e30ae7eca11f | ProcessOrder → ProcessPayment → ReserveInventory → ReleaseInventory → sns:NotifyReleaseInventoryFail → OrderFailed
+4-9 | No error | 47063fe3-56d9-4c51-b91f-71929834ce03 | ProcessOrder → ProcessPayment → ReserveInventory → sns:NotifySuccess → OrderSucceeded
+
+> **Tip:** When inspecting an execution in the Step Functions console, open the **Variables** panel (or a state's input) to watch the `$order` and `$error` workflow variables the saga uses to pass state to compensating transactions.
 
 ### Invoking your Step Function via CLI
 
@@ -129,14 +186,68 @@ The AWS CLI command will trigger a execution of your state machine. Make sure yo
 
 > `--region` must match the region you have deployed the application stack into. This is optional if you're using your default region.
 
+#### Scenario: successful order (prefix 4-9)
+
 ``` bash
 aws stepfunctions start-execution \
     --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
-    --input "{\"order_id\": \"40063fe3-56d9-4c51-b91f-71929834ce03\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99 }]}" \
+    --input "{\"order_id\": \"47063fe3-56d9-4c51-b91f-71929834ce03\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"3b27c7c4-7a3e-4635-aef9-6b5c74de6465\", \"items\": [{ \"item_id\": \"988\", \"qty\": 100.0, \"description\": \"Cart item 1\", \"unit_price\": 0.99 }]}" \
     --region [AWS_REGION]
 ```
 
-**[DOWNLOAD SCENARIO CLI COMMANDS](cli-commands.txt)**
+#### Scenario 1: ErrProcessOrder
+
+``` bash
+aws stepfunctions start-execution \
+    --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
+    --input "{\"order_id\": \"1ae4501d-ed92-4b27-bf0e-fd978ed45127\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"0d52eeef-52a1-4e6e-a5b1-d0515121306c\", \"items\": [{ \"item_id\": \"929\", \"qty\": 3.0, \"description\": \"Cart item 1\", \"unit_price\": 9.99  }]}" \
+    --region [AWS_REGION]
+```
+
+#### Scenario 11: ErrUpdateOrderStatus
+
+``` bash
+aws stepfunctions start-execution \
+    --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
+    --input "{\"order_id\": \"11328abd-368d-43fd-bd4f-db15b5b63951\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"8d04ea6f-c6b2-4422-8550-839a16f01feb\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99 }]}" \
+    --region [AWS_REGION]
+```
+
+#### Scenario 2: ErrProcessPayment
+
+``` bash
+aws stepfunctions start-execution \
+    --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
+    --input "{\"order_id\": \"20b0b599-441b-45c3-910e-ad63fe992c43\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"151ae48f-79b0-47b6-a8a6-bd8dbcf9af9a\", \"items\": [{ \"item_id\": \"423\", \"qty\": 10.0, \"description\": \"Cart item 1\", \"unit_price\": 34.99 }]}" \
+    --region [AWS_REGION]
+```
+
+#### Scenario 22: ErrProcessRefund
+
+``` bash
+aws stepfunctions start-execution \
+    --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
+    --input "{\"order_id\": \"222f741b-0292-4f93-a2f7-503f92486955\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"227dd3c9-58ab-4f0d-958a-5ead5858fba8\", \"items\": [{ \"item_id\": \"655\", \"qty\": 2.0, \"description\": \"Cart item 1\", \"unit_price\": 99.99 }]}" \
+    --region [AWS_REGION]
+```
+
+#### Scenario 3: ErrReserveInventory
+
+``` bash
+aws stepfunctions start-execution \
+    --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
+    --input "{\"order_id\": \"3a7dc768-6f32-495d-a140-3d330c246f50\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"aa226136-bd50-4718-8e87-6962c8d34779\", \"items\": [{ \"item_id\": \"765\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 6.50 }]}" \
+    --region [AWS_REGION]
+```
+
+#### Scenario 33: ErrReleaseInventory
+
+``` bash
+aws stepfunctions start-execution \
+    --state-machine-arn "arn:aws:states:[REGION]:[ACCOUNT NUMBER]:stateMachine:[STATEMACHINE-NAME]" \
+    --input "{\"order_id\": \"33a49007-a815-4079-9b9b-e30ae7eca11f\", \"order_date\": \"2018-10-19T10:50:16+08:00\", \"customer_id\": \"39081ebf-16a9-4e2c-a88b-d1a4c76956fd\", \"items\": [{ \"item_id\": \"567\", \"qty\": 1.0, \"description\": \"Cart item 1\", \"unit_price\": 199.99 }]}" \
+    --region [AWS_REGION]
+```
 
 ## How else can you implement this solution?
 
