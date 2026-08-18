@@ -134,17 +134,49 @@ The following is a list of all the custom errors thrown by the application and c
 
 The AWS Step Functions implementation has been configured for you to be easily test the various scenarios of the saga implementation. Modifying your `order_id` with a specified prefix will trigger an error in the each Task.
 
-OrderID Prefix | Will error with | Example | Expected execution
------------- | ------------- | --- | ---
-1 | ErrProcessOrder | 1ae4501d-ed92-4b27-bf0e-fd978ed45127 | ![1](images/paths-breakdown-1.png) 
-11 | ErrUpdateOrderStatus | 11328abd-368d-43fd-bd4f-db15b5b63951 | ![11](images/paths-breakdown-11.png)
-2 | ErrProcessPayment |  20b0b599-441b-45c3-910e-ad63fe992c43 | ![2](images/paths-breakdown-2.png)
-22 | ErrProcessRefund | 222f741b-0292-4f93-a2f7-503f92486955 | ![22](images/paths-breakdown-22.png)
-3 | ErrReserveInventory | 3a7dc768-6f32-495d-a140-3d330c246f50 | ![3](images/paths-breakdown-3.png)
-33 | ErrReleaseInventory | 33a49007-a815-4079-9b9b-e30ae7eca11f | ![3](images/paths-breakdown-33.png)
-4-9 | No error | 47063fe3-56d9-4c51-b91f-71929834ce03 | ![4-9](images/paths-breakdown-7.png)
+The full state machine, including every compensation edge:
 
-> **Note:** The execution-path screenshots were captured in an earlier version of the Step Functions console; the console's look has changed, but the state paths are identical. When inspecting an execution, open the **Variables** panel (or a state's input) to watch the `$order` and `$error` workflow variables the saga uses to pass state to compensating transactions.
+```mermaid
+flowchart TD
+    ProcessOrder -->|success| ProcessPayment
+    ProcessOrder -->|ErrProcessOrder| UpdateOrderStatus
+    ProcessPayment -->|success| ReserveInventory
+    ProcessPayment -->|ErrProcessPayment| ProcessRefund
+    ReserveInventory -->|success| NotifySuccess["sns:NotifySuccess"]
+    ReserveInventory -->|ErrReserveInventory| ReleaseInventory
+    NotifySuccess --> OrderSucceeded([OrderSucceeded])
+    ReleaseInventory -->|success| ProcessRefund
+    ReleaseInventory -->|ErrReleaseInventory| NotifyReleaseFail["sns:NotifyReleaseInventoryFail"]
+    ProcessRefund -->|success| UpdateOrderStatus
+    ProcessRefund -->|ErrProcessRefund| NotifyRefundFail["sns:NotifyProcessRefundFail"]
+    UpdateOrderStatus -->|success| OrderFailed([OrderFailed])
+    UpdateOrderStatus -->|ErrUpdateOrderStatus| NotifyUpdateFail["sns:NotifyUpdateOrderFail"]
+    NotifyReleaseFail --> OrderFailed
+    NotifyRefundFail --> OrderFailed
+
+    classDef forward fill:#2d6a4f,color:#fff
+    classDef compensation fill:#bc4b00,color:#fff
+    classDef notify fill:#1d4e89,color:#fff
+    classDef terminal fill:#495057,color:#fff
+    class ProcessOrder,ProcessPayment,ReserveInventory forward
+    class UpdateOrderStatus,ProcessRefund,ReleaseInventory compensation
+    class NotifySuccess,NotifyReleaseFail,NotifyRefundFail,NotifyUpdateFail notify
+    class OrderSucceeded,OrderFailed terminal
+```
+
+Each scenario drives the execution down a specific path:
+
+OrderID Prefix | Will error with | Example | Expected state path
+------------ | ------------- | --- | ---
+1 | ErrProcessOrder | 1ae4501d-ed92-4b27-bf0e-fd978ed45127 | ProcessOrder → UpdateOrderStatus → OrderFailed
+11 | ErrUpdateOrderStatus | 11328abd-368d-43fd-bd4f-db15b5b63951 | ProcessOrder → UpdateOrderStatus → sns:NotifyUpdateOrderFail → OrderFailed
+2 | ErrProcessPayment | 20b0b599-441b-45c3-910e-ad63fe992c43 | ProcessOrder → ProcessPayment → ProcessRefund → UpdateOrderStatus → OrderFailed
+22 | ErrProcessRefund | 222f741b-0292-4f93-a2f7-503f92486955 | ProcessOrder → ProcessPayment → ProcessRefund → sns:NotifyProcessRefundFail → OrderFailed
+3 | ErrReserveInventory | 3a7dc768-6f32-495d-a140-3d330c246f50 | ProcessOrder → ProcessPayment → ReserveInventory → ReleaseInventory → ProcessRefund → UpdateOrderStatus → OrderFailed
+33 | ErrReleaseInventory | 33a49007-a815-4079-9b9b-e30ae7eca11f | ProcessOrder → ProcessPayment → ReserveInventory → ReleaseInventory → sns:NotifyReleaseInventoryFail → OrderFailed
+4-9 | No error | 47063fe3-56d9-4c51-b91f-71929834ce03 | ProcessOrder → ProcessPayment → ReserveInventory → sns:NotifySuccess → OrderSucceeded
+
+> **Tip:** When inspecting an execution in the Step Functions console, open the **Variables** panel (or a state's input) to watch the `$order` and `$error` workflow variables the saga uses to pass state to compensating transactions.
 
 ### Invoking your Step Function via CLI
 
